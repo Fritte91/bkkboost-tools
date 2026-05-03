@@ -121,6 +121,19 @@
       font-family: 'DM Mono', monospace;
     }
     .model-opt.active .model-opt-meta { color: var(--text); }
+    .model-toggle-help {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 10px;
+      line-height: 1.45;
+    }
+    .model-toggle-help code {
+      font-family: 'DM Mono', monospace;
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -154,6 +167,11 @@
           <span class="model-opt-name">Quality</span>
           <span class="model-opt-meta">u2net · <span data-size="quality">checking…</span></span>
         </button>
+      </div>
+      <div class="model-toggle-help hidden" id="modelToggleHelp">
+        Quality mode (u2net, ~176 MB) requires a local install. Download <code>u2net.onnx</code> from
+        <a href="https://github.com/danielgatis/rembg/releases" target="_blank" rel="noopener">the rembg releases page</a>
+        and place it in the <code>models/</code> folder when running locally.
       </div>
     </div>
 
@@ -218,24 +236,24 @@
     // ─────────────────────────────────────────────────────────────
     // Config
     // ─────────────────────────────────────────────────────────────
-    // Each model has a localUrl (for local dev — drop the file in models/) and a
-    // remoteUrl (used in production / when the local file is missing). Both
-    // models share the 320×320 input — quality differs in network depth, not
-    // input resolution. Remote copies live on a public rembg release and are
-    // cached by the browser after the first fetch.
+    // Each model has a localUrl (drop the file in models/ for local dev). Fast
+    // also has a remoteUrl on Hugging Face, which serves CORS headers for
+    // public repos — GitHub releases redirect to a CDN that does not, so they
+    // can't be fetched cross-origin. Quality is too large to host as a remote
+    // fallback and is therefore local-install only.
     const MODELS = {
       fast: {
         id: 'fast',
         label: 'Fast',
         localUrl:  '../models/u2netp.onnx',
-        remoteUrl: 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx',
+        remoteUrl: 'https://huggingface.co/Xenova/u2netp-onnx/resolve/main/onnx/model.onnx',
         fallbackSize: '~4.7 MB',
       },
       quality: {
         id: 'quality',
         label: 'Quality',
         localUrl:  '../models/u2net.onnx',
-        remoteUrl: 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx',
+        remoteUrl: null,
         fallbackSize: '~176 MB',
       },
     };
@@ -266,6 +284,7 @@
     const progressBar  = document.getElementById('progressBar');
     const bgOptions    = document.getElementById('bgOptions');
     const modelToggle  = document.getElementById('modelToggle');
+    const modelToggleHelp = document.getElementById('modelToggleHelp');
 
     // ─────────────────────────────────────────────────────────────
     // State
@@ -312,9 +331,9 @@
     // ─────────────────────────────────────────────────────────────
     // Model loading
     // ─────────────────────────────────────────────────────────────
-    // Probe each model's local URL. If present, we use it; otherwise we mark
-    // the model as remote and load it from GitHub on demand. Both options are
-    // always "available" because the remote URL is a guaranteed fallback.
+    // Probe each model's local URL. If present, we use it. Otherwise, fall
+    // back to the remote URL if one is configured; if not, mark the model as
+    // unavailable so the toggle can disable that option.
     async function probeModels() {
       const out = {};
       await Promise.all(Object.values(MODELS).map(async m => {
@@ -326,26 +345,40 @@
             return;
           }
         } catch {}
-        out[m.id] = { available: true, size: null, url: m.remoteUrl, remote: true };
+        if (m.remoteUrl) {
+          out[m.id] = { available: true, size: null, url: m.remoteUrl, remote: true };
+        } else {
+          out[m.id] = { available: false, size: null, url: null, remote: false };
+        }
       }));
       return out;
     }
 
     function updateModelToggleUI() {
+      let anyUnavailable = false;
       for (const id of Object.keys(MODELS)) {
         const btn = modelToggle.querySelector(`[data-model="${id}"]`);
         const sizeEl = btn.querySelector(`[data-size="${id}"]`);
         const info = modelInfo[id];
+        if (info && !info.available) {
+          btn.disabled = true;
+          sizeEl.textContent = `Install locally for ${MODELS[id].label} mode (${MODELS[id].fallbackSize})`;
+          btn.title = `Download ${MODELS[id].localUrl.split('/').pop()} and place it in the models/ folder when running locally.`;
+          btn.classList.remove('active');
+          anyUnavailable = true;
+          continue;
+        }
         btn.disabled = processing;
         if (info?.remote) {
           sizeEl.textContent = `${MODELS[id].fallbackSize} · downloads on first use`;
-          btn.title = 'Will be downloaded from GitHub on first use, then cached by your browser.';
+          btn.title = 'Will be downloaded on first use, then cached by your browser.';
         } else {
           sizeEl.textContent = info?.size ? formatBytes(info.size) : MODELS[id].fallbackSize;
           btn.title = '';
         }
         btn.classList.toggle('active', id === currentModel);
       }
+      modelToggleHelp.classList.toggle('hidden', !anyUnavailable);
     }
 
     function setProcessingLock(locked) {
@@ -363,13 +396,16 @@
 
       const meta = MODELS[id];
       const info = modelInfo[id] || {};
-      const url = info.url || meta.localUrl;
+      if (!info.available || !info.url) {
+        throw new Error(`${meta.label} mode requires a local install — drop ${meta.localUrl.split('/').pop()} into the models/ folder.`);
+      }
+      const url = info.url;
       const isRemote = !!info.remote;
 
       sessionLoaders[id] = (async () => {
         const sizeText = info.size ? ` (${formatBytes(info.size)})` : '';
         if (isRemote) {
-          showInfo(`<span class="spinner"></span> Downloading ${meta.label} model from GitHub (first time only — cached by your browser after this)…`);
+          showInfo(`<span class="spinner"></span> Downloading ${meta.label} model (first time only — cached by your browser after this)…`);
         } else {
           showInfo(`<span class="spinner"></span> Loading ${meta.label} model${sizeText}…`);
         }
@@ -381,7 +417,7 @@
           const reader = resp.body.getReader();
           const chunks = [];
           let received = 0;
-          const verb = isRemote ? `Downloading ${meta.label} model from GitHub` : `Loading ${meta.label} model`;
+          const verb = isRemote ? `Downloading ${meta.label} model` : `Loading ${meta.label} model`;
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -469,6 +505,7 @@
     // Inference pipeline
     // ─────────────────────────────────────────────────────────────
     async function runInference(srcCanvas) {
+      clearError();
       downloadBtn.disabled = true;
       setProcessingLock(true);
       setStatus(`<span class="spinner"></span> Loading ${MODELS[currentModel].label} model…`);
@@ -666,12 +703,10 @@
     // ─────────────────────────────────────────────────────────────
     (async function init() {
       modelInfo = await probeModels();
-      // Default selection: locally-installed Quality > local Fast > remote Fast.
-      // Falling back to remote Fast (small) avoids forcing a 176MB download on first use.
-      if (modelInfo.quality && !modelInfo.quality.remote) {
+      // Default selection: locally-installed Quality > Fast (local or remote).
+      // Quality has no remote fallback, so we only pick it when it's installed.
+      if (modelInfo.quality?.available && !modelInfo.quality.remote) {
         currentModel = 'quality';
-      } else if (modelInfo.fast && !modelInfo.fast.remote) {
-        currentModel = 'fast';
       } else {
         currentModel = 'fast';
       }
