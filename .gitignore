@@ -1,8 +1,8 @@
 # Local Claude Code working dir
 .claude/
 
-# Large AI model file (>100MB GitHub limit). u2netp.onnx is the small one we ship.
-models/u2net.onnx
+# AI models — loaded from a public GitHub release at runtime, kept out of the repo.
+models/*.onnx
 
 # OS / editor cruft
 .DS_Store

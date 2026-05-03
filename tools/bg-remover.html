@@ -3,9 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BG Remover — BkkBoost Tools</title>
-  <meta name="description" content="Remove background from photos using AI. Runs 100% in your browser — your images never leave your device.">
+  <title>BG Remover — Free Online Tool | BkkBoost Tools</title>
+  <meta name="description" content="Remove backgrounds from photos using AI. Free online tool — no signup, no uploads, runs entirely in your browser.">
+  <meta property="og:title" content="BG Remover — Free Online Tool | BkkBoost Tools">
+  <meta property="og:description" content="Remove backgrounds from photos using AI. Free online tool — no signup, no uploads, runs entirely in your browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tools.bkkboost.com/tools/bg-remover.html">
+  <meta property="og:site_name" content="BkkBoost Tools">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="BG Remover — Free Online Tool | BkkBoost Tools">
+  <meta name="twitter:description" content="Remove backgrounds from photos using AI. Free online tool — no signup, no uploads, runs entirely in your browser.">
+  <link rel="canonical" href="https://tools.bkkboost.com/tools/bg-remover.html">
   <link rel="stylesheet" href="../shared.css">
+  <script>(function(){try{var t=localStorage.getItem('bkk-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
   <style>
     .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
@@ -121,7 +131,7 @@
       <div class="logo">Bkk<span>Boost</span></div>
       <div class="logo-tag">TOOLS</div>
     </div>
-    <span class="back-link" style="visibility:hidden">spacer</span>
+    <button type="button" class="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle theme"><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
   </header>
 
   <main class="tool-container">
@@ -208,11 +218,26 @@
     // ─────────────────────────────────────────────────────────────
     // Config
     // ─────────────────────────────────────────────────────────────
-    // Both models share the 320×320 input — the quality difference comes
-    // from network depth, not input resolution.
+    // Each model has a localUrl (for local dev — drop the file in models/) and a
+    // remoteUrl (used in production / when the local file is missing). Both
+    // models share the 320×320 input — quality differs in network depth, not
+    // input resolution. Remote copies live on a public rembg release and are
+    // cached by the browser after the first fetch.
     const MODELS = {
-      fast:    { id: 'fast',    label: 'Fast',    url: '../models/u2netp.onnx', fallbackSize: '~4.7 MB' },
-      quality: { id: 'quality', label: 'Quality', url: '../models/u2net.onnx',  fallbackSize: '~176 MB' },
+      fast: {
+        id: 'fast',
+        label: 'Fast',
+        localUrl:  '../models/u2netp.onnx',
+        remoteUrl: 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx',
+        fallbackSize: '~4.7 MB',
+      },
+      quality: {
+        id: 'quality',
+        label: 'Quality',
+        localUrl:  '../models/u2net.onnx',
+        remoteUrl: 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx',
+        fallbackSize: '~176 MB',
+      },
     };
     const MODEL_INPUT_SIZE = 320;
     const MEAN = [0.485, 0.456, 0.406];
@@ -287,20 +312,21 @@
     // ─────────────────────────────────────────────────────────────
     // Model loading
     // ─────────────────────────────────────────────────────────────
+    // Probe each model's local URL. If present, we use it; otherwise we mark
+    // the model as remote and load it from GitHub on demand. Both options are
+    // always "available" because the remote URL is a guaranteed fallback.
     async function probeModels() {
       const out = {};
       await Promise.all(Object.values(MODELS).map(async m => {
         try {
-          const r = await fetch(m.url, { method: 'HEAD', cache: 'no-store' });
+          const r = await fetch(m.localUrl, { method: 'HEAD', cache: 'no-store' });
           if (r.ok) {
             const sz = +r.headers.get('Content-Length') || null;
-            out[m.id] = { available: true, size: sz };
-          } else {
-            out[m.id] = { available: false, size: null };
+            out[m.id] = { available: true, size: sz, url: m.localUrl, remote: false };
+            return;
           }
-        } catch {
-          out[m.id] = { available: false, size: null };
-        }
+        } catch {}
+        out[m.id] = { available: true, size: null, url: m.remoteUrl, remote: true };
       }));
       return out;
     }
@@ -310,13 +336,12 @@
         const btn = modelToggle.querySelector(`[data-model="${id}"]`);
         const sizeEl = btn.querySelector(`[data-size="${id}"]`);
         const info = modelInfo[id];
-        if (!info || !info.available) {
-          btn.disabled = true;
-          sizeEl.textContent = 'not installed';
-          btn.title = `Place ${MODELS[id].url.split('/').pop()} in the models/ folder to enable`;
+        btn.disabled = processing;
+        if (info?.remote) {
+          sizeEl.textContent = `${MODELS[id].fallbackSize} · downloads on first use`;
+          btn.title = 'Will be downloaded from GitHub on first use, then cached by your browser.';
         } else {
-          btn.disabled = processing;
-          sizeEl.textContent = info.size ? formatBytes(info.size) : MODELS[id].fallbackSize;
+          sizeEl.textContent = info?.size ? formatBytes(info.size) : MODELS[id].fallbackSize;
           btn.title = '';
         }
         btn.classList.toggle('active', id === currentModel);
@@ -337,26 +362,35 @@
       if (sessionLoaders[id]) return sessionLoaders[id];
 
       const meta = MODELS[id];
-      sessionLoaders[id] = (async () => {
-        const sizeText = modelInfo[id]?.size ? ` (${formatBytes(modelInfo[id].size)})` : '';
-        showInfo(`<span class="spinner"></span> Loading ${meta.label} model${sizeText}…`);
-        try {
-          const resp = await fetch(meta.url);
-          if (!resp.ok) throw new Error(`Could not fetch ${meta.url} (${resp.status} ${resp.statusText}).`);
+      const info = modelInfo[id] || {};
+      const url = info.url || meta.localUrl;
+      const isRemote = !!info.remote;
 
-          const total = +resp.headers.get('Content-Length') || (modelInfo[id]?.size || 0);
+      sessionLoaders[id] = (async () => {
+        const sizeText = info.size ? ` (${formatBytes(info.size)})` : '';
+        if (isRemote) {
+          showInfo(`<span class="spinner"></span> Downloading ${meta.label} model from GitHub (first time only — cached by your browser after this)…`);
+        } else {
+          showInfo(`<span class="spinner"></span> Loading ${meta.label} model${sizeText}…`);
+        }
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`Could not fetch ${url} (${resp.status} ${resp.statusText}).`);
+
+          const total = +resp.headers.get('Content-Length') || (info.size || 0);
           const reader = resp.body.getReader();
           const chunks = [];
           let received = 0;
+          const verb = isRemote ? `Downloading ${meta.label} model from GitHub` : `Loading ${meta.label} model`;
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             chunks.push(value);
             received += value.length;
             if (total) {
-              showInfo(`<span class="spinner"></span> Loading ${meta.label} model… ${(received/total*100).toFixed(0)}%`);
+              showInfo(`<span class="spinner"></span> ${verb}… ${(received/total*100).toFixed(0)}%`);
             } else {
-              showInfo(`<span class="spinner"></span> Loading ${meta.label} model… ${formatBytes(received)}`);
+              showInfo(`<span class="spinner"></span> ${verb}… ${formatBytes(received)}`);
             }
           }
           const buf = new Uint8Array(received);
@@ -632,16 +666,18 @@
     // ─────────────────────────────────────────────────────────────
     (async function init() {
       modelInfo = await probeModels();
-      if (modelInfo.quality?.available) {
+      // Default selection: locally-installed Quality > local Fast > remote Fast.
+      // Falling back to remote Fast (small) avoids forcing a 176MB download on first use.
+      if (modelInfo.quality && !modelInfo.quality.remote) {
         currentModel = 'quality';
-      } else if (modelInfo.fast?.available) {
+      } else if (modelInfo.fast && !modelInfo.fast.remote) {
         currentModel = 'fast';
       } else {
         currentModel = 'fast';
-        showError('No background-removal model found. Place u2netp.onnx (Fast) or u2net.onnx (Quality) in the models/ folder.');
       }
       updateModelToggleUI();
     })();
   </script>
+  <script src="../shared.js"></script>
 </body>
 </html>

@@ -3,9 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OG Preview — BkkBoost Tools</title>
-  <meta name="description" content="Preview how a link will look when shared on Facebook, Twitter/X, LinkedIn, and Slack.">
+  <title>OG Preview — Free Online Tool | BkkBoost Tools</title>
+  <meta name="description" content="Preview how a link will appear when shared on Facebook, Twitter, LinkedIn, and Slack. Free, no signup, runs in your browser.">
+  <meta property="og:title" content="OG Preview — Free Online Tool | BkkBoost Tools">
+  <meta property="og:description" content="Preview how a link will appear when shared on Facebook, Twitter, LinkedIn, and Slack. Free, no signup, runs in your browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tools.bkkboost.com/tools/og-preview.html">
+  <meta property="og:site_name" content="BkkBoost Tools">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="OG Preview — Free Online Tool | BkkBoost Tools">
+  <meta name="twitter:description" content="Preview how a link will appear when shared on Facebook, Twitter, LinkedIn, and Slack. Free, no signup, runs in your browser.">
+  <link rel="canonical" href="https://tools.bkkboost.com/tools/og-preview.html">
   <link rel="stylesheet" href="../shared.css">
+  <script>(function(){try{var t=localStorage.getItem('bkk-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
   <style>
     .url-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .url-row input { flex: 1; min-width: 220px; }
@@ -155,6 +165,7 @@
   <header class="toolbar">
     <a href="../index.html" class="back-link">← All Tools</a>
     <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+    <button type="button" class="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle theme"><svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg><svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
   </header>
   <main class="tool-container">
     <div class="tool-header">
@@ -294,13 +305,6 @@
       htmlInput.value = `<html><head>
   <title>BkkBoost — Bangkok's Growth Studio</title>
   <meta name="description" content="We help Bangkok businesses grow with branding, web, and marketing.">
-  <meta property="og:title" content="BkkBoost — Bangkok's Growth Studio">
-  <meta property="og:description" content="A boutique studio in Bangkok helping local brands grow with sharp design and clear strategy.">
-  <meta property="og:image" content="https://picsum.photos/1200/630">
-  <meta property="og:url" content="https://bkkboost.com">
-  <meta property="og:site_name" content="BkkBoost">
-  <meta property="og:type" content="website">
-  <meta name="twitter:card" content="summary_large_image">
 </head></html>`;
       urlInput.value = 'https://bkkboost.com';
       parseAndPreview(htmlInput.value, urlInput.value);
@@ -403,5 +407,6 @@
       document.getElementById('slDesc').textContent = desc;
     }
   </script>
+  <script src="../shared.js"></script>
 </body>
 </html>

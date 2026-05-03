@@ -3,9 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BkkBoost Tools — Free Browser-Based Utilities</title>
-  <meta name="description" content="47 free online tools that run entirely in your browser. Image compression, PDF merge, QR codes, JSON formatting, and more. No uploads, no signups.">
+  <title>BkkBoost Tools — 47 Free Browser-Based Online Tools</title>
+  <meta name="description" content="Free online tools for image compression, PDF merge, QR codes, JSON formatting, and more. No uploads, no signups. Runs 100% in your browser.">
+  <meta property="og:title" content="BkkBoost Tools — 47 Free Browser-Based Online Tools">
+  <meta property="og:description" content="Free online tools for image compression, PDF merge, QR codes, JSON formatting, and more. No uploads, no signups. Runs 100% in your browser.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://tools.bkkboost.com/">
+  <meta property="og:site_name" content="BkkBoost Tools">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="BkkBoost Tools — 47 Free Browser-Based Online Tools">
+  <meta name="twitter:description" content="Free online tools for image compression, PDF merge, QR codes, JSON formatting, and more. No uploads, no signups. Runs 100% in your browser.">
+  <link rel="canonical" href="https://tools.bkkboost.com/">
   <link rel="stylesheet" href="shared.css">
+  <script>(function(){try{var t=localStorage.getItem('bkk-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
 </head>
 <body>
 
@@ -15,7 +25,13 @@
       <div class="logo">Bkk<span>Boost</span></div>
       <div class="logo-tag">TOOLS</div>
     </div>
-    <a href="https://bkkboost.com" target="_blank" rel="noopener" class="back-link">bkkboost.com →</a>
+    <div class="toolbar-actions">
+      <a href="https://bkkboost.com" target="_blank" rel="noopener" class="back-link">bkkboost.com →</a>
+      <button type="button" class="theme-toggle" aria-label="Toggle light or dark theme" title="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
   </header>
 
   <main class="landing">
@@ -145,14 +161,16 @@
         return;
       }
 
-      grid.innerHTML = filtered.map(t => `
-        <a class="tool-card" href="tools/${t.id}.html">
+      grid.innerHTML = filtered.map((t, i) => {
+        const stagger = 'stagger-' + ((i % 6) + 1);
+        return `
+        <a class="tool-card fade-in ${stagger}" href="tools/${t.id}.html">
           <span class="tool-card-icon">${t.icon}</span>
           <div class="tool-card-name">${escapeHtml(t.name)}</div>
           <div class="tool-card-desc">${escapeHtml(t.desc)}</div>
           <span class="${badgeClass(t.cat)}">${t.cat}</span>
-        </a>
-      `).join('');
+        </a>`;
+      }).join('');
     }
 
     function escapeHtml(s) {
@@ -175,5 +193,6 @@
 
     render();
   </script>
+  <script src="shared.js"></script>
 </body>
 </html>
