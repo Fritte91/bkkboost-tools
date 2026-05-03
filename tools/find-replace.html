@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find &amp; Replace — BkkBoost Tools</title>
+  <meta name="description" content="Find and replace text with case-sensitive, whole-word, and regex modes. Live highlighting.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 600px) { .search-row { grid-template-columns: 1fr; } }
+    .options-row {
+      display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;
+    }
+    .opt-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--text2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .opt-chip input { width: auto; margin: 0; }
+    .opt-chip.on { background: rgba(232,83,26,0.12); border-color: var(--orange); color: var(--orange); }
+
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
+    .meta-row {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 10px;
+      margin-bottom: 10px;
+    }
+    .match-count {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+    }
+    .match-count strong { color: var(--orange); }
+
+    .preview-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      max-height: 360px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+      min-height: 80px;
+    }
+    .hl {
+      background: rgba(232,83,26,0.28);
+      color: #FFD9C7;
+      border-radius: 3px;
+      padding: 0 1px;
+    }
+    .hl.current {
+      background: var(--orange);
+      color: white;
+      outline: 2px solid var(--orange-light);
+      outline-offset: 1px;
+    }
+    .empty-pre {
+      color: var(--text3);
+      font-family: 'DM Sans', sans-serif;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Find &amp; Replace</h1>
+      <p class="tool-desc">Find and replace text with case-sensitive, whole-word, and regex modes. Highlights update as you type.</p>
+    </div>
+
+    <div class="panel">
+      <label for="content">Content</label>
+      <textarea id="content" placeholder="Paste or type your text here…" style="min-height: 200px; font-family: DM Mono, monospace;"></textarea>
+    </div>
+
+    <div class="panel">
+      <div class="search-row">
+        <div>
+          <label for="findIn">Find</label>
+          <input type="text" id="findIn" placeholder="Search for…" autocomplete="off">
+        </div>
+        <div>
+          <label for="replaceIn">Replace with</label>
+          <input type="text" id="replaceIn" placeholder="Replacement text…" autocomplete="off">
+        </div>
+      </div>
+      <div class="options-row">
+        <label class="opt-chip" data-opt="case"><input type="checkbox" id="optCase">Case sensitive</label>
+        <label class="opt-chip" data-opt="word"><input type="checkbox" id="optWord">Whole word</label>
+        <label class="opt-chip" data-opt="regex"><input type="checkbox" id="optRegex">Regex</label>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="findBtn">🔍 Find All</button>
+        <button class="btn-secondary" id="replaceNextBtn">→ Replace Next</button>
+        <button class="btn-secondary" id="replaceAllBtn">⇉ Replace All</button>
+      </div>
+      <div id="errorBar" class="error-bar hidden"></div>
+    </div>
+
+    <div class="panel">
+      <div class="meta-row">
+        <div class="panel-title" style="margin-bottom: 0;">Highlighted preview</div>
+        <div class="match-count" id="matchCount"><strong>0</strong> matches</div>
+      </div>
+      <div class="preview-box" id="preview"><div class="empty-pre">Type text and a search term to see highlights.</div></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const content = document.getElementById('content');
+    const findIn = document.getElementById('findIn');
+    const replaceIn = document.getElementById('replaceIn');
+    const optCase = document.getElementById('optCase');
+    const optWord = document.getElementById('optWord');
+    const optRegex = document.getElementById('optRegex');
+    const optChips = document.querySelectorAll('.opt-chip');
+    const findBtn = document.getElementById('findBtn');
+    const replaceNextBtn = document.getElementById('replaceNextBtn');
+    const replaceAllBtn = document.getElementById('replaceAllBtn');
+    const errorBar = document.getElementById('errorBar');
+    const matchCount = document.getElementById('matchCount');
+    const preview = document.getElementById('preview');
+
+    content.value = 'Hello world. The quick brown fox jumps over the lazy dog. Hello again, world.';
+
+    let currentIdx = 0;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
+    }
+    function escapeRegex(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function syncChips() {
+      optChips.forEach(chip => {
+        const cb = chip.querySelector('input');
+        chip.classList.toggle('on', cb.checked);
+      });
+    }
+    optChips.forEach(chip => {
+      chip.addEventListener('click', e => {
+        if (e.target.tagName === 'INPUT') return;
+        const cb = chip.querySelector('input');
+        cb.checked = !cb.checked;
+        syncChips();
+        rerender();
+      });
+    });
+    [optCase, optWord, optRegex].forEach(el => el.addEventListener('change', () => { syncChips(); rerender(); }));
+    syncChips();
+
+    function buildRegex(globalFlag = true) {
+      const term = findIn.value;
+      if (!term) return null;
+      let pattern = optRegex.checked ? term : escapeRegex(term);
+      if (optWord.checked) pattern = '\\b(?:' + pattern + ')\\b';
+      const flags = (globalFlag ? 'g' : '') + (optCase.checked ? '' : 'i');
+      try { return new RegExp(pattern, flags); }
+      catch (e) { showError('Invalid regex: ' + e.message); return null; }
+    }
+
+    function findAllMatches() {
+      const re = buildRegex(true);
+      if (!re) return [];
+      const text = content.value;
+      const out = [];
+      for (const m of text.matchAll(re)) {
+        out.push({ index: m.index, length: m[0].length });
+        if (m[0].length === 0) re.lastIndex++; // safety against zero-length loops
+      }
+      return out;
+    }
+
+    function rerender() {
+      clearError();
+      const text = content.value;
+      if (!findIn.value) {
+        preview.innerHTML = text
+          ? escapeHtml(text)
+          : '<div class="empty-pre">Type text and a search term to see highlights.</div>';
+        matchCount.innerHTML = '<strong>0</strong> matches';
+        return;
+      }
+      const matches = findAllMatches();
+      if (currentIdx >= matches.length) currentIdx = 0;
+
+      let html = '';
+      let cursor = 0;
+      matches.forEach((m, i) => {
+        if (m.index > cursor) html += escapeHtml(text.slice(cursor, m.index));
+        const cls = (i === currentIdx) ? 'hl current' : 'hl';
+        html += '<span class="' + cls + '">' + escapeHtml(text.substr(m.index, m.length)) + '</span>';
+        cursor = m.index + m.length;
+      });
+      if (cursor < text.length) html += escapeHtml(text.slice(cursor));
+      preview.innerHTML = html || '<div class="empty-pre">No matches.</div>';
+      matchCount.innerHTML = '<strong>' + matches.length + '</strong> match' + (matches.length === 1 ? '' : 'es');
+    }
+
+    findBtn.addEventListener('click', () => { currentIdx = 0; rerender(); scrollToCurrent(); });
+
+    replaceNextBtn.addEventListener('click', () => {
+      const matches = findAllMatches();
+      if (!matches.length) return;
+      if (currentIdx >= matches.length) currentIdx = 0;
+      const m = matches[currentIdx];
+      const text = content.value;
+      const after = text.slice(0, m.index) + replaceIn.value + text.slice(m.index + m.length);
+      content.value = after;
+      // Stay on same logical position so the next click hits the next occurrence
+      const newMatches = findAllMatches();
+      if (currentIdx >= newMatches.length) currentIdx = 0;
+      rerender();
+      scrollToCurrent();
+    });
+
+    replaceAllBtn.addEventListener('click', () => {
+      const re = buildRegex(true);
+      if (!re) return;
+      const replacement = replaceIn.value;
+      // Use replaceAll with the regex; rely on the global flag.
+      try {
+        content.value = content.value.replace(re, replacement);
+        currentIdx = 0;
+        rerender();
+      } catch (e) { showError('Replace failed: ' + e.message); }
+    });
+
+    function scrollToCurrent() {
+      const el = preview.querySelector('.hl.current');
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+
+    let typingTimer;
+    [content, findIn, replaceIn].forEach(el => {
+      el.addEventListener('input', () => {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => { currentIdx = 0; rerender(); }, 100);
+      });
+    });
+
+    rerender();
+  </script>
+</body>
+</html>

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pomodoro Timer — BkkBoost Tools</title>
+  <meta name="description" content="A clean Pomodoro focus timer with a circular progress ring, audio chime, and session tracking.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .pomo-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .modes {
+      display: flex;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 4px;
+      border-radius: 100px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .mode-btn:hover { color: var(--text); }
+    .mode-btn.active {
+      background: var(--orange);
+      color: white;
+    }
+
+    .ring-wrap {
+      position: relative;
+      width: 320px;
+      height: 320px;
+      max-width: 80vw;
+      max-height: 80vw;
+    }
+    .ring-svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+    .ring-track {
+      stroke: var(--surface3);
+      fill: none;
+    }
+    .ring-bar {
+      stroke: var(--orange);
+      fill: none;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.4s linear;
+    }
+    .ring-bar.break { stroke: var(--green); }
+    .ring-bar.long { stroke: var(--blue); }
+
+    .ring-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .time-text {
+      font-family: 'DM Mono', monospace;
+      font-size: 56px;
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .mode-text {
+      font-size: 12px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .meta {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      color: var(--text2);
+      font-size: 13px;
+    }
+    .meta-stat strong {
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 20px;
+      font-weight: 500;
+      display: block;
+      margin-top: 2px;
+    }
+
+    .custom-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .custom-row input {
+      width: 70px;
+      text-align: center;
+      font-family: 'DM Mono', monospace;
+    }
+    .custom-row label { margin: 0; }
+
+    .options {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--text2);
+    }
+    .options label {
+      display: flex; align-items: center; gap: 6px;
+      margin: 0;
+      cursor: pointer;
+      color: var(--text2);
+    }
+    .options input { width: auto; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Pomodoro Timer</h1>
+      <p class="tool-desc">Focus in 25-minute intervals with short and long breaks. The page title updates while running.</p>
+    </div>
+
+    <div class="panel">
+      <div class="pomo-wrap">
+        <div class="modes" id="modes">
+          <button class="mode-btn active" data-mode="pomo" data-mins="25">Pomodoro · 25</button>
+          <button class="mode-btn" data-mode="short" data-mins="5">Short Break · 5</button>
+          <button class="mode-btn" data-mode="long" data-mins="15">Long Break · 15</button>
+        </div>
+
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 200 200">
+            <circle class="ring-track" cx="100" cy="100" r="90" stroke-width="10"></circle>
+            <circle id="ringBar" class="ring-bar" cx="100" cy="100" r="90" stroke-width="10"
+                    stroke-dasharray="565.487" stroke-dashoffset="0"></circle>
+          </svg>
+          <div class="ring-center">
+            <div class="time-text" id="timeText">25:00</div>
+            <div class="mode-text" id="modeText">Pomodoro</div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="btn-primary" id="startBtn">▶ Start</button>
+          <button class="btn-secondary" id="resetBtn">↺ Reset</button>
+          <button class="btn-secondary" id="skipBtn">⏭ Skip</button>
+        </div>
+
+        <div class="meta">
+          <div class="meta-stat">Completed pomodoros<strong id="sessionCount">0</strong></div>
+          <div class="meta-stat">Today's focus<strong id="focusTotal">0m</strong></div>
+        </div>
+
+        <div class="custom-row">
+          <label>Custom minutes</label>
+          <input type="number" id="customMins" min="1" max="180" placeholder="25">
+          <button class="btn-secondary btn-sm" id="customApply">Apply</button>
+        </div>
+
+        <div class="options">
+          <label><input type="checkbox" id="optSound" checked> Sound</label>
+          <label><input type="checkbox" id="optNotify"> Browser notification</label>
+          <label><input type="checkbox" id="optAuto"> Auto-start next</label>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Timer runs in your browser</footer>
+
+  <script>
+    const RING_CIRCUMFERENCE = 2 * Math.PI * 90;
+
+    const ringBar = document.getElementById('ringBar');
+    const timeText = document.getElementById('timeText');
+    const modeText = document.getElementById('modeText');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const customMins = document.getElementById('customMins');
+    const customApply = document.getElementById('customApply');
+    const sessionCountEl = document.getElementById('sessionCount');
+    const focusTotalEl = document.getElementById('focusTotal');
+    const optSound = document.getElementById('optSound');
+    const optNotify = document.getElementById('optNotify');
+    const optAuto = document.getElementById('optAuto');
+    const modesEl = document.getElementById('modes');
+
+    ringBar.style.strokeDasharray = RING_CIRCUMFERENCE.toFixed(3);
+
+    let mode = 'pomo';
+    let totalSeconds = 25 * 60;
+    let remaining = totalSeconds;
+    let running = false;
+    let endTime = null;
+    let tickHandle = null;
+    let pomosCompleted = 0;
+    let focusMinutes = 0;
+    const originalTitle = document.title;
+
+    function updateRing() {
+      const progress = remaining / totalSeconds;
+      const offset = RING_CIRCUMFERENCE * (1 - progress);
+      ringBar.style.strokeDashoffset = offset.toFixed(3);
+      ringBar.classList.toggle('break', mode === 'short');
+      ringBar.classList.toggle('long', mode === 'long');
+    }
+
+    function fmtTime(s) {
+      const mm = Math.floor(s / 60).toString().padStart(2, '0');
+      const ss = Math.floor(s % 60).toString().padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    function render() {
+      timeText.textContent = fmtTime(remaining);
+      const labels = { pomo: 'Pomodoro', short: 'Short Break', long: 'Long Break', custom: 'Custom' };
+      modeText.textContent = labels[mode] || 'Custom';
+      updateRing();
+      document.title = running ? `${fmtTime(remaining)} · ${labels[mode] || 'Timer'}` : originalTitle;
+    }
+
+    function setMode(m, mins) {
+      stop();
+      mode = m;
+      totalSeconds = mins * 60;
+      remaining = totalSeconds;
+      [...modesEl.children].forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+      render();
+    }
+
+    function start() {
+      if (running) return;
+      running = true;
+      endTime = Date.now() + remaining * 1000;
+      startBtn.textContent = '⏸ Pause';
+      tick();
+      tickHandle = setInterval(tick, 250);
+    }
+
+    function pause() {
+      running = false;
+      if (tickHandle) clearInterval(tickHandle);
+      tickHandle = null;
+      startBtn.textContent = '▶ Resume';
+      document.title = originalTitle;
+    }
+
+    function stop() {
+      running = false;
+      if (tickHandle) clearInterval(tickHandle);
+      tickHandle = null;
+      startBtn.textContent = '▶ Start';
+      document.title = originalTitle;
+    }
+
+    function reset() {
+      stop();
+      remaining = totalSeconds;
+      render();
+    }
+
+    function tick() {
+      if (!running) return;
+      remaining = Math.max(0, Math.round((endTime - Date.now()) / 1000));
+      render();
+      if (remaining <= 0) finish();
+    }
+
+    function finish() {
+      stop();
+      remaining = 0;
+      render();
+      if (optSound.checked) playChime();
+      if (optNotify.checked && Notification.permission === 'granted') {
+        const labels = { pomo: 'Pomodoro complete', short: 'Short break done', long: 'Long break done', custom: 'Time up' };
+        new Notification('BkkBoost Pomodoro', { body: labels[mode] || 'Time up — back to work!' });
+      }
+      if (mode === 'pomo' || mode === 'custom') {
+        pomosCompleted++;
+        focusMinutes += Math.round(totalSeconds / 60);
+        sessionCountEl.textContent = pomosCompleted;
+        focusTotalEl.textContent = formatFocus(focusMinutes);
+      }
+      remaining = totalSeconds;
+      render();
+      if (optAuto.checked) {
+        if (mode === 'pomo') {
+          const next = (pomosCompleted % 4 === 0) ? 'long' : 'short';
+          const mins = next === 'long' ? 15 : 5;
+          setMode(next, mins);
+        } else {
+          setMode('pomo', 25);
+        }
+        start();
+      }
+    }
+
+    function formatFocus(m) {
+      if (m < 60) return m + 'm';
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return rem ? `${h}h ${rem}m` : `${h}h`;
+    }
+
+    let audioCtx = null;
+    function playChime() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const beep = (freq, start, dur) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, audioCtx.currentTime + start);
+          gain.gain.linearRampToValueAtTime(0.25, audioCtx.currentTime + start + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + start + dur);
+          osc.start(audioCtx.currentTime + start);
+          osc.stop(audioCtx.currentTime + start + dur + 0.02);
+        };
+        beep(880, 0, 0.18);
+        beep(1320, 0.22, 0.22);
+      } catch (e) { /* audio unavailable */ }
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (running) pause(); else start();
+    });
+    resetBtn.addEventListener('click', reset);
+    skipBtn.addEventListener('click', () => { remaining = 0; finish(); });
+
+    modesEl.addEventListener('click', e => {
+      const b = e.target.closest('.mode-btn');
+      if (!b) return;
+      setMode(b.dataset.mode, parseInt(b.dataset.mins, 10));
+    });
+
+    customApply.addEventListener('click', () => {
+      const v = parseInt(customMins.value, 10);
+      if (!v || v < 1 || v > 180) return;
+      [...modesEl.children].forEach(b => b.classList.remove('active'));
+      setMode('custom', v);
+    });
+    customMins.addEventListener('keydown', e => {
+      if (e.key === 'Enter') customApply.click();
+    });
+
+    optNotify.addEventListener('change', async () => {
+      if (optNotify.checked && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+          const p = await Notification.requestPermission();
+          if (p !== 'granted') optNotify.checked = false;
+        } else if (Notification.permission === 'denied') {
+          optNotify.checked = false;
+        }
+      }
+    });
+
+    window.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.code === 'Space') { e.preventDefault(); startBtn.click(); }
+      else if (e.key === 'r' || e.key === 'R') { reset(); }
+    });
+
+    render();
+  </script>
+</body>
+</html>

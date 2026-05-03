@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit Converter — BkkBoost Tools</title>
+  <meta name="description" content="Convert between units of length, weight, temperature, area, volume, speed, and data.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .cat-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cat-tabs .tab { padding: 6px 14px; }
+    .converter {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .swap-row { display: flex; justify-content: center; margin-top: 14px; }
+    .swap-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: all 0.15s;
+      padding: 0;
+    }
+    .swap-btn:hover { color: var(--orange); border-color: var(--orange); transform: rotate(180deg); }
+    @media (max-width: 600px) { .converter { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Unit Converter</h1>
+      <p class="tool-desc">Convert between common units. Updates live as you type.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Category</div>
+      <div class="cat-tabs" id="catTabs"></div>
+    </div>
+
+    <div class="panel">
+      <div class="converter">
+        <div>
+          <label for="fromVal">From</label>
+          <input id="fromVal" type="number" step="any" value="1">
+          <select id="fromUnit" style="margin-top: 8px;"></select>
+        </div>
+        <div>
+          <label for="toVal">To</label>
+          <input id="toVal" type="number" step="any" readonly>
+          <select id="toUnit" style="margin-top: 8px;"></select>
+        </div>
+      </div>
+      <div class="swap-row">
+        <button class="swap-btn" id="swapBtn" title="Swap units" aria-label="Swap units">⇄</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side</footer>
+  <script>
+    const categories = {
+      Length: {
+        units: [
+          { id: 'mm',  name: 'Millimeter (mm)', f: 0.001 },
+          { id: 'cm',  name: 'Centimeter (cm)', f: 0.01 },
+          { id: 'm',   name: 'Meter (m)', f: 1 },
+          { id: 'km',  name: 'Kilometer (km)', f: 1000 },
+          { id: 'in',  name: 'Inch (in)', f: 0.0254 },
+          { id: 'ft',  name: 'Foot (ft)', f: 0.3048 },
+          { id: 'yd',  name: 'Yard (yd)', f: 0.9144 },
+          { id: 'mi',  name: 'Mile (mi)', f: 1609.344 },
+          { id: 'nmi', name: 'Nautical mile', f: 1852 },
+        ]
+      },
+      Weight: {
+        units: [
+          { id: 'mg', name: 'Milligram (mg)', f: 0.001 },
+          { id: 'g',  name: 'Gram (g)', f: 1 },
+          { id: 'kg', name: 'Kilogram (kg)', f: 1000 },
+          { id: 't',  name: 'Tonne (t)', f: 1e6 },
+          { id: 'oz', name: 'Ounce (oz)', f: 28.349523125 },
+          { id: 'lb', name: 'Pound (lb)', f: 453.59237 },
+          { id: 'st', name: 'Stone (st)', f: 6350.29318 },
+        ]
+      },
+      Temperature: {
+        custom: 'temperature',
+        units: [
+          { id: 'C', name: 'Celsius (°C)' },
+          { id: 'F', name: 'Fahrenheit (°F)' },
+          { id: 'K', name: 'Kelvin (K)' },
+        ]
+      },
+      Area: {
+        units: [
+          { id: 'sqmm', name: 'Square mm (mm²)', f: 1e-6 },
+          { id: 'sqcm', name: 'Square cm (cm²)', f: 1e-4 },
+          { id: 'sqm',  name: 'Square meter (m²)', f: 1 },
+          { id: 'sqkm', name: 'Square km (km²)', f: 1e6 },
+          { id: 'ha',   name: 'Hectare (ha)', f: 10000 },
+          { id: 'sqin', name: 'Square inch (in²)', f: 0.00064516 },
+          { id: 'sqft', name: 'Square foot (ft²)', f: 0.09290304 },
+          { id: 'sqyd', name: 'Square yard (yd²)', f: 0.83612736 },
+          { id: 'acre', name: 'Acre', f: 4046.8564224 },
+          { id: 'sqmi', name: 'Square mile (mi²)', f: 2589988.110336 },
+        ]
+      },
+      Volume: {
+        units: [
+          { id: 'ml',   name: 'Milliliter (ml)', f: 0.001 },
+          { id: 'l',    name: 'Liter (l)', f: 1 },
+          { id: 'm3',   name: 'Cubic meter (m³)', f: 1000 },
+          { id: 'tsp',  name: 'Teaspoon (US)', f: 0.00492892 },
+          { id: 'tbsp', name: 'Tablespoon (US)', f: 0.0147868 },
+          { id: 'floz', name: 'Fluid ounce (US)', f: 0.0295735 },
+          { id: 'cup',  name: 'Cup (US)', f: 0.236588 },
+          { id: 'pt',   name: 'Pint (US)', f: 0.473176 },
+          { id: 'qt',   name: 'Quart (US)', f: 0.946353 },
+          { id: 'gal',  name: 'Gallon (US)', f: 3.78541 },
+        ]
+      },
+      Speed: {
+        units: [
+          { id: 'mps',  name: 'Meters / sec (m/s)', f: 1 },
+          { id: 'kmh',  name: 'Kilometers / hour (km/h)', f: 1000 / 3600 },
+          { id: 'mph',  name: 'Miles / hour (mph)', f: 1609.344 / 3600 },
+          { id: 'fps',  name: 'Feet / sec (ft/s)', f: 0.3048 },
+          { id: 'knot', name: 'Knot', f: 1852 / 3600 },
+        ]
+      },
+      Data: {
+        units: [
+          { id: 'b',   name: 'Bit',           f: 0.125 },
+          { id: 'B',   name: 'Byte (B)',      f: 1 },
+          { id: 'KB',  name: 'Kilobyte (KB, 1000)',  f: 1000 },
+          { id: 'KiB', name: 'Kibibyte (KiB, 1024)', f: 1024 },
+          { id: 'MB',  name: 'Megabyte (MB)', f: 1e6 },
+          { id: 'MiB', name: 'Mebibyte (MiB)', f: 1024 * 1024 },
+          { id: 'GB',  name: 'Gigabyte (GB)', f: 1e9 },
+          { id: 'GiB', name: 'Gibibyte (GiB)', f: 1024 ** 3 },
+          { id: 'TB',  name: 'Terabyte (TB)', f: 1e12 },
+          { id: 'TiB', name: 'Tebibyte (TiB)', f: 1024 ** 4 },
+        ]
+      }
+    };
+
+    function tempToBase(v, id) {
+      if (id === 'C') return v;
+      if (id === 'F') return (v - 32) * 5 / 9;
+      if (id === 'K') return v - 273.15;
+    }
+    function tempFromBase(v, id) {
+      if (id === 'C') return v;
+      if (id === 'F') return v * 9 / 5 + 32;
+      if (id === 'K') return v + 273.15;
+    }
+
+    let currentCat = 'Length';
+
+    const catTabs = document.getElementById('catTabs');
+    const fromUnit = document.getElementById('fromUnit');
+    const toUnit = document.getElementById('toUnit');
+    const fromVal = document.getElementById('fromVal');
+    const toVal = document.getElementById('toVal');
+
+    function buildTabs() {
+      catTabs.innerHTML = '';
+      Object.keys(categories).forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'tab' + (cat === currentCat ? ' active' : '');
+        btn.textContent = cat;
+        btn.onclick = () => { currentCat = cat; buildTabs(); buildUnits(); convert(); };
+        catTabs.appendChild(btn);
+      });
+    }
+
+    function buildUnits() {
+      const cat = categories[currentCat];
+      [fromUnit, toUnit].forEach(sel => {
+        sel.innerHTML = '';
+        cat.units.forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.id;
+          opt.textContent = u.name;
+          sel.appendChild(opt);
+        });
+      });
+      fromUnit.value = cat.units[0].id;
+      toUnit.value = cat.units[Math.min(1, cat.units.length - 1)].id;
+    }
+
+    function format(n) {
+      if (!isFinite(n)) return '';
+      const abs = Math.abs(n);
+      if (abs !== 0 && (abs < 1e-4 || abs >= 1e16)) return n.toExponential(6);
+      return parseFloat(n.toPrecision(10)).toString();
+    }
+
+    function convert() {
+      const cat = categories[currentCat];
+      const v = parseFloat(fromVal.value);
+      if (!isFinite(v)) { toVal.value = ''; return; }
+      let result;
+      if (cat.custom === 'temperature') {
+        const base = tempToBase(v, fromUnit.value);
+        result = tempFromBase(base, toUnit.value);
+      } else {
+        const f1 = cat.units.find(u => u.id === fromUnit.value).f;
+        const f2 = cat.units.find(u => u.id === toUnit.value).f;
+        result = (v * f1) / f2;
+      }
+      toVal.value = format(result);
+    }
+
+    fromVal.addEventListener('input', convert);
+    fromUnit.addEventListener('change', convert);
+    toUnit.addEventListener('change', convert);
+    document.getElementById('swapBtn').addEventListener('click', () => {
+      const a = fromUnit.value, b = toUnit.value;
+      fromUnit.value = b; toUnit.value = a;
+      if (toVal.value !== '') fromVal.value = toVal.value;
+      convert();
+    });
+
+    buildTabs();
+    buildUnits();
+    convert();
+  </script>
+</body>
+</html>

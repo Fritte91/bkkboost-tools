@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JWT Decoder — BkkBoost Tools</title>
+  <meta name="description" content="Decode and inspect JSON Web Tokens locally — header, payload, expiry. No signature verification.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .seg-input {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      min-height: 130px;
+      word-break: break-all;
+    }
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    @media (max-width: 720px) { .three-col { grid-template-columns: 1fr; } }
+
+    .seg-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .seg-card h3 {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .seg-tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+    .seg-tag.header   { background: rgba(232,83,26,0.15); color: var(--orange); }
+    .seg-tag.payload  { background: rgba(168,85,247,0.15); color: #C4B5FD; }
+    .seg-tag.signature{ background: rgba(59,130,246,0.15); color: #93C5FD; }
+
+    pre.json {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--text);
+      margin: 0;
+      min-height: 180px;
+    }
+    .signature-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      word-break: break-all;
+      color: var(--text2);
+      min-height: 60px;
+    }
+    .jk { color: #93C5FD; }
+    .js { color: #86EFAC; }
+    .jn { color: #F59E0B; }
+    .jb { color: #C4B5FD; font-weight: 500; }
+    .jl { color: var(--text3); font-style: italic; }
+
+    .claims-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 24px;
+      margin-top: 14px;
+      font-size: 12px;
+    }
+    .claims-info > div span:first-child {
+      color: var(--text3);
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 2px;
+    }
+    .claims-info > div span:last-child {
+      font-family: 'DM Mono', monospace;
+      color: var(--text);
+    }
+    .badge-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 500;
+      margin-left: 8px;
+    }
+    .badge-chip.ok  { background: rgba(34,197,94,0.12); color: #86EFAC; }
+    .badge-chip.bad { background: rgba(239,68,68,0.12); color: #FCA5A5; }
+    @media (max-width: 600px) { .claims-info { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>JWT Decoder</h1>
+      <p class="tool-desc">Paste a token to decode the header and payload. Decoding only — the signature is not verified.</p>
+    </div>
+
+    <div class="panel">
+      <label for="jwtIn">JWT</label>
+      <textarea id="jwtIn" class="seg-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMiLCJuYW1lIjoiRnJlZGRpZSJ9.signature"></textarea>
+      <div id="errorBar" class="error-bar hidden" style="margin-top: 12px;"></div>
+    </div>
+
+    <div id="results" class="hidden">
+      <div class="seg-card">
+        <h3>Header <span class="seg-tag header">eyJhbGc…</span></h3>
+        <pre class="json" id="headerOut"></pre>
+      </div>
+
+      <div class="seg-card" style="margin-top: 14px;">
+        <h3>Payload <span class="seg-tag payload">eyJzdWI…</span><span id="expiryBadge"></span></h3>
+        <pre class="json" id="payloadOut"></pre>
+        <div class="claims-info" id="claimsInfo"></div>
+      </div>
+
+      <div class="seg-card" style="margin-top: 14px;">
+        <h3>Signature <span class="seg-tag signature">base64</span></h3>
+        <div class="signature-box" id="sigOut"></div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const jwtIn = document.getElementById('jwtIn');
+    const errorBar = document.getElementById('errorBar');
+    const results = document.getElementById('results');
+    const headerOut = document.getElementById('headerOut');
+    const payloadOut = document.getElementById('payloadOut');
+    const sigOut = document.getElementById('sigOut');
+    const expiryBadge = document.getElementById('expiryBadge');
+    const claimsInfo = document.getElementById('claimsInfo');
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); results.classList.add('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    function escapeHtml(s) { return s.replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'); }
+    function highlight(json) {
+      return escapeHtml(json).replace(
+        /("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false)\b|\bnull\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g,
+        (m, str, colon, bool) => {
+          if (str !== undefined) {
+            if (colon) return '<span class="jk">' + str + '</span>' + colon;
+            return '<span class="js">' + str + '</span>';
+          }
+          if (bool !== undefined) return '<span class="jb">' + bool + '</span>';
+          if (m === 'null') return '<span class="jl">null</span>';
+          return '<span class="jn">' + m + '</span>';
+        }
+      );
+    }
+
+    function b64urlDecode(s) {
+      let str = s.replace(/-/g, '+').replace(/_/g, '/');
+      while (str.length % 4) str += '=';
+      const bin = atob(str);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    }
+
+    function fmtDate(unix) {
+      try {
+        const d = new Date(unix * 1000);
+        if (isNaN(d.getTime())) return null;
+        return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
+      } catch { return null; }
+    }
+
+    function decode() {
+      const v = jwtIn.value.trim();
+      if (!v) { results.classList.add('hidden'); clearError(); return; }
+      const parts = v.split('.');
+      if (parts.length !== 3) { showError('A JWT must have three dot-separated parts (header.payload.signature).'); return; }
+      const [h, p, s] = parts;
+      let header, payload;
+      try { header = JSON.parse(b64urlDecode(h)); }
+      catch (e) { showError('Could not decode header: ' + e.message); return; }
+      try { payload = JSON.parse(b64urlDecode(p)); }
+      catch (e) { showError('Could not decode payload: ' + e.message); return; }
+
+      clearError();
+      results.classList.remove('hidden');
+      headerOut.innerHTML = highlight(JSON.stringify(header, null, 2));
+      payloadOut.innerHTML = highlight(JSON.stringify(payload, null, 2));
+      sigOut.textContent = s || '(empty)';
+
+      // Expiry badge
+      expiryBadge.innerHTML = '';
+      if (typeof payload.exp === 'number') {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const expired = payload.exp <= nowSec;
+        const chip = document.createElement('span');
+        chip.className = 'badge-chip ' + (expired ? 'bad' : 'ok');
+        chip.textContent = expired ? 'Expired' : 'Active';
+        expiryBadge.appendChild(chip);
+      }
+
+      // Claims info
+      claimsInfo.innerHTML = '';
+      const rows = [];
+      if (typeof payload.iat === 'number') rows.push(['Issued at', fmtDate(payload.iat) || payload.iat]);
+      if (typeof payload.nbf === 'number') rows.push(['Not before', fmtDate(payload.nbf) || payload.nbf]);
+      if (typeof payload.exp === 'number') rows.push(['Expires', fmtDate(payload.exp) || payload.exp]);
+      if (payload.iss) rows.push(['Issuer', String(payload.iss)]);
+      if (payload.aud) rows.push(['Audience', Array.isArray(payload.aud) ? payload.aud.join(', ') : String(payload.aud)]);
+      if (payload.sub) rows.push(['Subject', String(payload.sub)]);
+      rows.forEach(([k, val]) => {
+        const div = document.createElement('div');
+        const label = document.createElement('span'); label.textContent = k;
+        const value = document.createElement('span'); value.textContent = val;
+        div.appendChild(label); div.appendChild(value);
+        claimsInfo.appendChild(div);
+      });
+    }
+
+    jwtIn.addEventListener('input', decode);
+    jwtIn.addEventListener('paste', () => setTimeout(decode, 0));
+  </script>
+</body>
+</html>

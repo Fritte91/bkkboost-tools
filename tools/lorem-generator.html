@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lorem Ipsum Generator — BkkBoost Tools</title>
+  <meta name="description" content="Generate Lorem Ipsum placeholder text by paragraphs. Optional HTML wrapping.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .toggle-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .toggle-row input { width: auto; }
+    .toggle-row label { margin: 0; cursor: pointer; color: var(--text); font-size: 14px; flex: 1; }
+    .actions { display: flex; gap: 10px; margin-top: 14px; }
+    .status { font-size: 12px; color: var(--text3); margin-top: 8px; min-height: 16px; }
+    @media (max-width: 600px) { .controls-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Lorem Ipsum Generator</h1>
+      <p class="tool-desc">Generate placeholder text — useful for mockups, designs, and dummy content.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Options</div>
+      <div class="stack">
+        <div>
+          <label for="paragraphs">Paragraphs (1–20)</label>
+          <input type="number" id="paragraphs" min="1" max="20" value="3">
+        </div>
+        <div class="controls-grid">
+          <div class="toggle-row"><input type="checkbox" id="optStart" checked><label for="optStart">Start with "Lorem ipsum"</label></div>
+          <div class="toggle-row"><input type="checkbox" id="optHtml"><label for="optHtml">Wrap in &lt;p&gt; tags</label></div>
+        </div>
+        <div>
+          <button class="btn-primary" id="genBtn">📝 Generate</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Output</div>
+      <textarea id="output" readonly placeholder="Generated text will appear here…" style="min-height: 280px;"></textarea>
+      <div class="actions">
+        <button class="btn-secondary" id="copyBtn">📋 Copy</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side</footer>
+  <script>
+    const WORDS = ('lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id est laborum at vero eos accusamus iusto odio dignissimos ducimus blanditiis praesentium voluptatum deleniti atque corrupti quos dolores quas molestias excepturi obcaecati provident similique mollitia animi laborum dolorum fuga harum quidem rerum facilis expedita distinctio nam libero tempore cum soluta nobis eligendi optio cumque nihil impedit minus quod maxime placeat facere possimus omnis voluptas assumenda repellendus temporibus autem quibusdam officiis debitis').split(' ');
+
+    function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+    function pick() { return WORDS[Math.floor(Math.random() * WORDS.length)]; }
+
+    function makeSentence() {
+      const len = rand(8, 18);
+      const words = [];
+      for (let i = 0; i < len; i++) words.push(pick());
+      words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+      if (len > 10) {
+        const i = rand(3, len - 3);
+        words[i] = words[i] + ',';
+      }
+      return words.join(' ') + '.';
+    }
+
+    function makeParagraph() {
+      const sentences = rand(3, 6);
+      const out = [];
+      for (let i = 0; i < sentences; i++) out.push(makeSentence());
+      return out.join(' ');
+    }
+
+    function generate() {
+      const n = Math.max(1, Math.min(20, parseInt(document.getElementById('paragraphs').value, 10) || 1));
+      const useHtml = document.getElementById('optHtml').checked;
+      const start = document.getElementById('optStart').checked;
+
+      const paragraphs = [];
+      for (let i = 0; i < n; i++) {
+        let p = makeParagraph();
+        if (i === 0 && start) {
+          p = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. ' + p;
+        }
+        paragraphs.push(p);
+      }
+      const out = useHtml
+        ? paragraphs.map(p => '<p>' + p + '</p>').join('\n')
+        : paragraphs.join('\n\n');
+      document.getElementById('output').value = out;
+    }
+
+    const status = document.getElementById('status');
+    document.getElementById('genBtn').addEventListener('click', generate);
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const v = document.getElementById('output').value;
+      if (!v) return;
+      try {
+        await navigator.clipboard.writeText(v);
+        status.textContent = 'Copied to clipboard.';
+        setTimeout(() => status.textContent = '', 2000);
+      } catch (e) { status.textContent = 'Could not copy.'; }
+    });
+
+    generate();
+  </script>
+</body>
+</html>

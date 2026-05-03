@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Converter — BkkBoost Tools</title>
+  <meta name="description" content="Convert images between PNG, JPEG, WebP, and GIF in your browser.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Image Converter</h1>
+      <p class="tool-desc">Convert between PNG, JPEG, WebP, and GIF in your browser.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">🔄</div>
+      <div class="dropzone-title">Drop an image or click to browse</div>
+      <div class="dropzone-subtitle">Any browser-supported image format</div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+    <div id="warnBar" class="info-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Convert to</div>
+        <select id="format">
+          <option value="image/png">PNG</option>
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/webp">WebP</option>
+          <option value="image/gif">GIF (single frame)</option>
+        </select>
+      </div>
+
+      <div class="preview-grid">
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Original — <span id="origFmt">—</span></span>
+            <span class="preview-size" id="origSize">—</span>
+          </div>
+          <img id="origImg" alt="Original">
+        </div>
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Converted — <span id="newFmt">—</span></span>
+            <span class="preview-size" id="newSize">—</span>
+          </div>
+          <img id="newImg" alt="Converted">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="downloadBtn">⬇ Download</button>
+        <button class="btn-secondary" id="resetBtn">🔄 New image</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const warnBar = document.getElementById('warnBar');
+    const workspace = document.getElementById('workspace');
+    const formatSel = document.getElementById('format');
+    const origImg = document.getElementById('origImg');
+    const newImg = document.getElementById('newImg');
+    const origFmt = document.getElementById('origFmt');
+    const newFmt = document.getElementById('newFmt');
+    const origSize = document.getElementById('origSize');
+    const newSize = document.getElementById('newSize');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let originalFile = null;
+    let originalImage = null;
+    let convertedBlob = null;
+    let actualType = '';
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    function extOf(t) {
+      if (t === 'image/jpeg') return 'jpg';
+      if (t === 'image/webp') return 'webp';
+      if (t === 'image/gif')  return 'gif';
+      return 'png';
+    }
+    function nameOf(t) {
+      if (t === 'image/jpeg') return 'JPEG';
+      if (t === 'image/webp') return 'WebP';
+      if (t === 'image/gif')  return 'GIF';
+      if (t === 'image/png')  return 'PNG';
+      if (t === 'image/svg+xml') return 'SVG';
+      return (t || '').replace('image/', '').toUpperCase() || '—';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError()  { errorBar.classList.add('hidden'); }
+    function showWarn(msg) { warnBar.textContent = msg; warnBar.classList.remove('hidden'); }
+    function clearWarn()   { warnBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError(); clearWarn();
+      if (!file.type.startsWith('image/')) { showError('Please choose an image file.'); return; }
+      originalFile = file;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        originalImage = img;
+        if (origImg.src) URL.revokeObjectURL(origImg.src);
+        origImg.src = url;
+        origFmt.textContent = nameOf(file.type);
+        origSize.textContent = fmtSize(file.size);
+        workspace.classList.remove('hidden');
+        if (file.type === 'image/png') formatSel.value = 'image/jpeg';
+        else formatSel.value = 'image/png';
+        convert();
+      };
+      img.onerror = () => showError('Could not decode this image.');
+      img.src = url;
+    }
+
+    formatSel.addEventListener('change', convert);
+
+    function convert() {
+      if (!originalImage) return;
+      clearWarn();
+      const requested = formatSel.value;
+      const canvas = document.createElement('canvas');
+      canvas.width = originalImage.naturalWidth;
+      canvas.height = originalImage.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (requested === 'image/jpeg' || requested === 'image/gif') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(originalImage, 0, 0);
+      canvas.toBlob(blob => {
+        if (!blob) {
+          showError('Conversion to this format is not supported by your browser.');
+          return;
+        }
+        actualType = blob.type || requested;
+        if (requested === 'image/gif' && actualType !== 'image/gif') {
+          showWarn('Browsers can\'t natively encode GIF. Saved as PNG instead — for animated GIFs, use a dedicated GIF tool.');
+        }
+        convertedBlob = blob;
+        if (newImg.src) URL.revokeObjectURL(newImg.src);
+        newImg.src = URL.createObjectURL(blob);
+        newFmt.textContent = nameOf(actualType);
+        newSize.textContent = fmtSize(blob.size);
+      }, requested, 0.92);
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      if (!convertedBlob) return;
+      const baseName = originalFile.name.replace(/\.[^.]+$/, '');
+      const ext = extOf(actualType);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(convertedBlob);
+      a.download = baseName + '.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    resetBtn.addEventListener('click', () => {
+      originalFile = null;
+      originalImage = null;
+      convertedBlob = null;
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      clearWarn(); clearError();
+      if (origImg.src) URL.revokeObjectURL(origImg.src);
+      if (newImg.src) URL.revokeObjectURL(newImg.src);
+      origImg.removeAttribute('src');
+      newImg.removeAttribute('src');
+    });
+  </script>
+</body>
+</html>

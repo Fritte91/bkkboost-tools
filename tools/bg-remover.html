@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BG Remover — BkkBoost Tools</title>
+  <meta name="description" content="Remove background from photos using AI. Runs 100% in your browser — your images never leave your device.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
+  <style>
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+    .status-line {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; color: var(--text2);
+      margin: 6px 0 0;
+      min-height: 20px;
+    }
+    .preview-canvas-wrap {
+      position: relative;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .preview-canvas-wrap canvas, .preview-canvas-wrap img {
+      max-width: 100%;
+      height: auto;
+      max-height: 420px;
+      object-fit: contain;
+    }
+    .bg-options {
+      display: flex; gap: 8px; flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .bg-swatch {
+      width: 32px; height: 32px;
+      border-radius: var(--radius-sm);
+      border: 2px solid var(--border2);
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.15s;
+      padding: 0;
+    }
+    .bg-swatch:hover { transform: scale(1.05); }
+    .bg-swatch.active { border-color: var(--orange); }
+    .bg-checker {
+      background:
+        linear-gradient(45deg, #888 25%, transparent 25%),
+        linear-gradient(-45deg, #888 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #888 75%),
+        linear-gradient(-45deg, transparent 75%, #888 75%);
+      background-size: 8px 8px;
+      background-position: 0 0, 0 4px, 4px -4px, 4px 0px;
+      background-color: #ddd;
+    }
+
+    /* Model quality toggle (above the dropzone) */
+    .model-toggle {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+    .model-toggle-label {
+      font-size: 12px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .model-toggle-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .model-opt {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      text-align: left;
+      cursor: pointer;
+      color: var(--text);
+      transition: all 0.15s;
+      font-family: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .model-opt:hover:not(:disabled):not(.active) {
+      border-color: var(--text3);
+      background: var(--surface3);
+    }
+    .model-opt.active {
+      border-color: var(--orange);
+      background: rgba(232,83,26,0.08);
+    }
+    .model-opt:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .model-opt-name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .model-opt-meta {
+      font-size: 12px;
+      color: var(--text2);
+      font-family: 'DM Mono', monospace;
+    }
+    .model-opt.active .model-opt-meta { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand">
+      <div class="logo">Bkk<span>Boost</span></div>
+      <div class="logo-tag">TOOLS</div>
+    </div>
+    <span class="back-link" style="visibility:hidden">spacer</span>
+  </header>
+
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>BG Remover</h1>
+      <p class="tool-desc">Remove background from photos using AI. Runs entirely in your browser — your images never leave your device.</p>
+    </div>
+
+    <div id="modelStatus" class="info-bar hidden"></div>
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div class="model-toggle" id="modelToggle">
+      <div class="model-toggle-label">AI Model</div>
+      <div class="model-toggle-options">
+        <button class="model-opt" data-model="fast" type="button">
+          <span class="model-opt-name">Fast</span>
+          <span class="model-opt-meta">u2netp · <span data-size="fast">checking…</span></span>
+        </button>
+        <button class="model-opt" data-model="quality" type="button">
+          <span class="model-opt-name">Quality</span>
+          <span class="model-opt-meta">u2net · <span data-size="quality">checking…</span></span>
+        </button>
+      </div>
+    </div>
+
+    <div id="dropzone" class="dropzone">
+      <div class="dropzone-icon">🖼️</div>
+      <div class="dropzone-title">Drop an image here</div>
+      <div class="dropzone-subtitle">or click to browse · PNG, JPG, WebP</div>
+      <input id="fileInput" type="file" accept="image/*" hidden>
+    </div>
+
+    <div id="workspace" class="hidden">
+      <div class="preview-grid" style="margin-top: 20px;">
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Original</span>
+            <span id="origSize" class="preview-size"></span>
+          </div>
+          <div class="preview-canvas-wrap">
+            <img id="originalImg" alt="Original">
+          </div>
+        </div>
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Background removed</span>
+            <span id="resultSize" class="preview-size"></span>
+          </div>
+          <div class="preview-canvas-wrap">
+            <canvas id="resultCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 16px;">
+        <div class="panel-title">Background</div>
+        <div class="bg-options" id="bgOptions">
+          <button class="bg-swatch bg-checker active" data-bg="transparent" title="Transparent (PNG)"></button>
+          <button class="bg-swatch" data-bg="#FFFFFF" style="background:#FFFFFF" title="White"></button>
+          <button class="bg-swatch" data-bg="#000000" style="background:#000000" title="Black"></button>
+          <button class="bg-swatch" data-bg="#E8531A" style="background:#E8531A" title="BkkBoost orange"></button>
+          <button class="bg-swatch" data-bg="#1B2A4A" style="background:#1B2A4A" title="Navy"></button>
+          <button class="bg-swatch" data-bg="#22C55E" style="background:#22C55E" title="Green"></button>
+          <button class="bg-swatch" data-bg="#3B82F6" style="background:#3B82F6" title="Blue"></button>
+        </div>
+      </div>
+
+      <div id="processingStatus" class="status-line"></div>
+      <div id="progress" class="progress hidden"><div id="progressBar" class="progress-bar"></div></div>
+
+      <div class="actions">
+        <button id="downloadBtn" class="btn-primary" disabled>⬇ Download PNG</button>
+        <button id="newImageBtn" class="btn-secondary">🔄 New Image</button>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="footer">
+    BkkBoost Tools · 100% client-side · Your files never leave your device
+  </footer>
+
+  <script>
+    // ─────────────────────────────────────────────────────────────
+    // Config
+    // ─────────────────────────────────────────────────────────────
+    // Both models share the 320×320 input — the quality difference comes
+    // from network depth, not input resolution.
+    const MODELS = {
+      fast:    { id: 'fast',    label: 'Fast',    url: '../models/u2netp.onnx', fallbackSize: '~4.7 MB' },
+      quality: { id: 'quality', label: 'Quality', url: '../models/u2net.onnx',  fallbackSize: '~176 MB' },
+    };
+    const MODEL_INPUT_SIZE = 320;
+    const MEAN = [0.485, 0.456, 0.406];
+    const STD  = [0.229, 0.224, 0.225];
+
+    // Tell ORT where to load its WASM artifacts from (CDN).
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/';
+    ort.env.wasm.numThreads = 1;
+
+    // ─────────────────────────────────────────────────────────────
+    // DOM
+    // ─────────────────────────────────────────────────────────────
+    const dz           = document.getElementById('dropzone');
+    const fileInput    = document.getElementById('fileInput');
+    const workspace    = document.getElementById('workspace');
+    const originalImg  = document.getElementById('originalImg');
+    const resultCanvas = document.getElementById('resultCanvas');
+    const origSizeEl   = document.getElementById('origSize');
+    const resultSizeEl = document.getElementById('resultSize');
+    const downloadBtn  = document.getElementById('downloadBtn');
+    const newImageBtn  = document.getElementById('newImageBtn');
+    const errorBar     = document.getElementById('errorBar');
+    const modelStatus  = document.getElementById('modelStatus');
+    const processingStatus = document.getElementById('processingStatus');
+    const progress     = document.getElementById('progress');
+    const progressBar  = document.getElementById('progressBar');
+    const bgOptions    = document.getElementById('bgOptions');
+    const modelToggle  = document.getElementById('modelToggle');
+
+    // ─────────────────────────────────────────────────────────────
+    // State
+    // ─────────────────────────────────────────────────────────────
+    const sessions = {};        // model id -> ort.InferenceSession (cached after first load)
+    const sessionLoaders = {};  // model id -> in-flight load Promise
+    let modelInfo = {};         // model id -> { available, size }
+    let currentModel = 'fast';  // overwritten by init() based on what's installed
+    let processing = false;     // locks the model toggle while inference runs
+    let lastMaskCanvas = null;
+    let lastSourceCanvas = null;
+    let lastFilename = 'image';
+    let currentBg = 'transparent';
+
+    // ─────────────────────────────────────────────────────────────
+    // Utilities
+    // ─────────────────────────────────────────────────────────────
+    function showError(msg) {
+      errorBar.textContent = msg;
+      errorBar.classList.remove('hidden');
+    }
+    function clearError() { errorBar.classList.add('hidden'); errorBar.textContent = ''; }
+
+    function showInfo(msg) {
+      modelStatus.innerHTML = msg;
+      modelStatus.classList.remove('hidden');
+    }
+    function hideInfo() { modelStatus.classList.add('hidden'); modelStatus.innerHTML = ''; }
+
+    function formatBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function setProgress(pct) {
+      progress.classList.remove('hidden');
+      progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    }
+    function hideProgress() { progress.classList.add('hidden'); progressBar.style.width = '0%'; }
+
+    function setStatus(html) { processingStatus.innerHTML = html; }
+
+    // ─────────────────────────────────────────────────────────────
+    // Model loading
+    // ─────────────────────────────────────────────────────────────
+    async function probeModels() {
+      const out = {};
+      await Promise.all(Object.values(MODELS).map(async m => {
+        try {
+          const r = await fetch(m.url, { method: 'HEAD', cache: 'no-store' });
+          if (r.ok) {
+            const sz = +r.headers.get('Content-Length') || null;
+            out[m.id] = { available: true, size: sz };
+          } else {
+            out[m.id] = { available: false, size: null };
+          }
+        } catch {
+          out[m.id] = { available: false, size: null };
+        }
+      }));
+      return out;
+    }
+
+    function updateModelToggleUI() {
+      for (const id of Object.keys(MODELS)) {
+        const btn = modelToggle.querySelector(`[data-model="${id}"]`);
+        const sizeEl = btn.querySelector(`[data-size="${id}"]`);
+        const info = modelInfo[id];
+        if (!info || !info.available) {
+          btn.disabled = true;
+          sizeEl.textContent = 'not installed';
+          btn.title = `Place ${MODELS[id].url.split('/').pop()} in the models/ folder to enable`;
+        } else {
+          btn.disabled = processing;
+          sizeEl.textContent = info.size ? formatBytes(info.size) : MODELS[id].fallbackSize;
+          btn.title = '';
+        }
+        btn.classList.toggle('active', id === currentModel);
+      }
+    }
+
+    function setProcessingLock(locked) {
+      processing = locked;
+      if (locked) {
+        modelToggle.querySelectorAll('.model-opt').forEach(b => b.disabled = true);
+      } else {
+        updateModelToggleUI();
+      }
+    }
+
+    async function loadModel(id) {
+      if (sessions[id]) return sessions[id];
+      if (sessionLoaders[id]) return sessionLoaders[id];
+
+      const meta = MODELS[id];
+      sessionLoaders[id] = (async () => {
+        const sizeText = modelInfo[id]?.size ? ` (${formatBytes(modelInfo[id].size)})` : '';
+        showInfo(`<span class="spinner"></span> Loading ${meta.label} model${sizeText}…`);
+        try {
+          const resp = await fetch(meta.url);
+          if (!resp.ok) throw new Error(`Could not fetch ${meta.url} (${resp.status} ${resp.statusText}).`);
+
+          const total = +resp.headers.get('Content-Length') || (modelInfo[id]?.size || 0);
+          const reader = resp.body.getReader();
+          const chunks = [];
+          let received = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (total) {
+              showInfo(`<span class="spinner"></span> Loading ${meta.label} model… ${(received/total*100).toFixed(0)}%`);
+            } else {
+              showInfo(`<span class="spinner"></span> Loading ${meta.label} model… ${formatBytes(received)}`);
+            }
+          }
+          const buf = new Uint8Array(received);
+          let offset = 0;
+          for (const c of chunks) { buf.set(c, offset); offset += c.length; }
+
+          showInfo('<span class="spinner"></span> Initializing inference engine…');
+          const sess = await ort.InferenceSession.create(buf.buffer, {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all',
+          });
+          sessions[id] = sess;
+          hideInfo();
+          return sess;
+        } catch (err) {
+          delete sessionLoaders[id];
+          throw err;
+        }
+      })();
+      return sessionLoaders[id];
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // File handling
+    // ─────────────────────────────────────────────────────────────
+    dz.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    });
+
+    ['dragenter','dragover'].forEach(evt =>
+      dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(evt =>
+      dz.addEventListener(evt, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+    dz.addEventListener('drop', e => {
+      const f = e.dataTransfer.files[0];
+      if (f) handleFile(f);
+    });
+
+    async function handleFile(file) {
+      clearError();
+      if (!file.type.startsWith('image/')) {
+        showError('Please drop an image file (PNG, JPG, or WebP).');
+        return;
+      }
+
+      lastFilename = file.name.replace(/\.[^.]+$/, '') || 'image';
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target.result;
+        const img = new Image();
+        img.onload = () => {
+          dz.classList.add('hidden');
+          workspace.classList.remove('hidden');
+          originalImg.src = dataUrl;
+          origSizeEl.textContent = `${img.naturalWidth}×${img.naturalHeight} · ${formatBytes(file.size)}`;
+
+          // Build srcCanvas at native size — kept for compositing & re-runs.
+          const srcCanvas = document.createElement('canvas');
+          srcCanvas.width = img.naturalWidth;
+          srcCanvas.height = img.naturalHeight;
+          srcCanvas.getContext('2d').drawImage(img, 0, 0);
+          lastSourceCanvas = srcCanvas;
+
+          runInference(srcCanvas).catch(handleInferenceError);
+        };
+        img.onerror = () => showError('Could not decode this image. Try a different file.');
+        img.src = dataUrl;
+      };
+      reader.onerror = () => showError('Could not read this file.');
+      reader.readAsDataURL(file);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Inference pipeline
+    // ─────────────────────────────────────────────────────────────
+    async function runInference(srcCanvas) {
+      downloadBtn.disabled = true;
+      setProcessingLock(true);
+      setStatus(`<span class="spinner"></span> Loading ${MODELS[currentModel].label} model…`);
+      setProgress(5);
+
+      const sess = await loadModel(currentModel);
+      setProgress(35);
+      setStatus('<span class="spinner"></span> Preparing image…');
+
+      // Down-scaled canvas at the model's expected input size.
+      const inSize = MODEL_INPUT_SIZE;
+      const inCanvas = document.createElement('canvas');
+      inCanvas.width = inSize;
+      inCanvas.height = inSize;
+      const inCtx = inCanvas.getContext('2d');
+      inCtx.drawImage(srcCanvas, 0, 0, inSize, inSize);
+      const inData = inCtx.getImageData(0, 0, inSize, inSize).data;
+
+      // Build the input tensor: NCHW float32, normalized.
+      const tensorData = new Float32Array(3 * inSize * inSize);
+      const plane = inSize * inSize;
+      for (let i = 0; i < plane; i++) {
+        const r = inData[i*4]     / 255;
+        const g = inData[i*4 + 1] / 255;
+        const b = inData[i*4 + 2] / 255;
+        tensorData[i]             = (r - MEAN[0]) / STD[0];
+        tensorData[i + plane]     = (g - MEAN[1]) / STD[1];
+        tensorData[i + 2 * plane] = (b - MEAN[2]) / STD[2];
+      }
+      const inputTensor = new ort.Tensor('float32', tensorData, [1, 3, inSize, inSize]);
+
+      setProgress(55);
+      setStatus(`<span class="spinner"></span> Running ${MODELS[currentModel].label} inference…`);
+      // Yield to the browser so the spinner paints before the heavy WASM call.
+      await new Promise(r => setTimeout(r, 16));
+
+      const inputName = sess.inputNames[0];
+      const feeds = { [inputName]: inputTensor };
+      const t0 = performance.now();
+      const results = await sess.run(feeds);
+      const inferenceMs = performance.now() - t0;
+
+      setProgress(80);
+      setStatus('<span class="spinner"></span> Compositing mask…');
+
+      // u2netp / u2net typically expose 7 outputs (d0..d6). Use the first.
+      const firstName = sess.outputNames[0];
+      const maskTensor = results[firstName];
+      const maskRaw = maskTensor.data; // Float32Array, length inSize*inSize
+
+      // Normalize to [0,1] for robustness across exports.
+      let min = Infinity, max = -Infinity;
+      for (let i = 0; i < maskRaw.length; i++) {
+        const v = maskRaw[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      const range = (max - min) || 1;
+
+      // Build a 320×320 grayscale canvas of the mask.
+      const maskSmall = document.createElement('canvas');
+      maskSmall.width = inSize;
+      maskSmall.height = inSize;
+      const mctx = maskSmall.getContext('2d');
+      const mImg = mctx.createImageData(inSize, inSize);
+      for (let i = 0; i < maskRaw.length; i++) {
+        const a = Math.round(((maskRaw[i] - min) / range) * 255);
+        mImg.data[i*4]     = 255;
+        mImg.data[i*4 + 1] = 255;
+        mImg.data[i*4 + 2] = 255;
+        mImg.data[i*4 + 3] = a;
+      }
+      mctx.putImageData(mImg, 0, 0);
+
+      // Upscale the mask to the original image dimensions (smooth).
+      const maskFull = document.createElement('canvas');
+      maskFull.width = srcCanvas.width;
+      maskFull.height = srcCanvas.height;
+      const mfctx = maskFull.getContext('2d');
+      mfctx.imageSmoothingEnabled = true;
+      mfctx.imageSmoothingQuality = 'high';
+      mfctx.drawImage(maskSmall, 0, 0, maskFull.width, maskFull.height);
+      lastMaskCanvas = maskFull;
+
+      compositeWithBackground(currentBg);
+
+      setProgress(100);
+      setStatus(`✓ ${MODELS[currentModel].label} done in ${(inferenceMs/1000).toFixed(2)}s`);
+      downloadBtn.disabled = false;
+      setProcessingLock(false);
+      setTimeout(hideProgress, 600);
+    }
+
+    function handleInferenceError(err) {
+      console.error(err);
+      showError(err.message || 'Something went wrong while removing the background.');
+      hideProgress();
+      setStatus('');
+      setProcessingLock(false);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Compositing — apply mask over original, with chosen background
+    // ─────────────────────────────────────────────────────────────
+    function compositeWithBackground(bg) {
+      if (!lastMaskCanvas || !lastSourceCanvas) return;
+
+      const w = lastSourceCanvas.width;
+      const h = lastSourceCanvas.height;
+      resultCanvas.width = w;
+      resultCanvas.height = h;
+      const ctx = resultCanvas.getContext('2d');
+
+      // Build cutout: source RGB × mask alpha.
+      const cutout = document.createElement('canvas');
+      cutout.width = w;
+      cutout.height = h;
+      const cctx = cutout.getContext('2d');
+      cctx.drawImage(lastSourceCanvas, 0, 0);
+      cctx.globalCompositeOperation = 'destination-in';
+      cctx.drawImage(lastMaskCanvas, 0, 0);
+      cctx.globalCompositeOperation = 'source-over';
+
+      ctx.clearRect(0, 0, w, h);
+      if (bg !== 'transparent') {
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.drawImage(cutout, 0, 0);
+
+      resultSizeEl.textContent = `${w}×${h}`;
+    }
+
+    bgOptions.addEventListener('click', e => {
+      const btn = e.target.closest('.bg-swatch');
+      if (!btn) return;
+      bgOptions.querySelectorAll('.bg-swatch').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentBg = btn.dataset.bg;
+      if (lastMaskCanvas) compositeWithBackground(currentBg);
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // Download
+    // ─────────────────────────────────────────────────────────────
+    downloadBtn.addEventListener('click', () => {
+      if (!lastMaskCanvas) return;
+      resultCanvas.toBlob(blob => {
+        if (!blob) { showError('Could not generate the output file.'); return; }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${lastFilename}-no-bg.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      }, 'image/png');
+    });
+
+    newImageBtn.addEventListener('click', () => {
+      workspace.classList.add('hidden');
+      dz.classList.remove('hidden');
+      fileInput.value = '';
+      lastMaskCanvas = null;
+      lastSourceCanvas = null;
+      downloadBtn.disabled = true;
+      clearError();
+      setStatus('');
+      hideProgress();
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // Model toggle — switch model and re-run inference if image is loaded
+    // ─────────────────────────────────────────────────────────────
+    modelToggle.addEventListener('click', async e => {
+      const btn = e.target.closest('.model-opt');
+      if (!btn || btn.disabled) return;
+      const id = btn.dataset.model;
+      if (id === currentModel) return;
+
+      currentModel = id;
+      updateModelToggleUI();
+
+      if (lastSourceCanvas) {
+        try {
+          await runInference(lastSourceCanvas);
+        } catch (err) {
+          handleInferenceError(err);
+        }
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // Init — probe both models, default to Quality if available, else Fast
+    // ─────────────────────────────────────────────────────────────
+    (async function init() {
+      modelInfo = await probeModels();
+      if (modelInfo.quality?.available) {
+        currentModel = 'quality';
+      } else if (modelInfo.fast?.available) {
+        currentModel = 'fast';
+      } else {
+        currentModel = 'fast';
+        showError('No background-removal model found. Place u2netp.onnx (Fast) or u2net.onnx (Quality) in the models/ folder.');
+      }
+      updateModelToggleUI();
+    })();
+  </script>
+</body>
+</html>

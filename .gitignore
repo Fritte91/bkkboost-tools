@@ -1,0 +1,22 @@
+# Local Claude Code working dir
+.claude/
+
+# Large AI model file (>100MB GitHub limit). u2netp.onnx is the small one we ship.
+models/u2net.onnx
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local

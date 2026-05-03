@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UUID Generator — BkkBoost Tools</title>
+  <meta name="description" content="Generate v4 UUIDs (RFC 4122) one at a time or in bulk. 100% client-side.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .uuid-output {
+      font-family: 'DM Mono', monospace;
+      font-size: 16px;
+      padding: 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      word-break: break-all;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+      color: var(--text);
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .row-input { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+    .row-input > div { flex: 1; min-width: 140px; }
+    .row-input button { flex: 0 0 auto; }
+    .uuid-list {
+      list-style: none; padding: 0; margin: 0;
+      max-height: 460px; overflow-y: auto;
+    }
+    .uuid-list li {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+    .status { font-size: 12px; color: var(--text3); margin-top: 8px; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>UUID Generator</h1>
+      <p class="tool-desc">Generate v4 UUIDs (RFC 4122) using the browser's cryptographic RNG.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Single UUID</div>
+      <div class="uuid-output" id="single">—</div>
+      <div class="actions">
+        <button class="btn-primary" id="genBtn">🆔 Generate</button>
+        <button class="btn-secondary" id="copyBtn">📋 Copy</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Bulk</div>
+      <div class="row-input">
+        <div>
+          <label for="count">How many (1–100)</label>
+          <input type="number" id="count" min="1" max="100" value="10">
+        </div>
+        <button class="btn-primary" id="bulkBtn">Generate</button>
+        <button class="btn-secondary" id="bulkCopyBtn">📋 Copy all</button>
+      </div>
+      <ul class="uuid-list" id="list" style="margin-top: 14px;"></ul>
+      <div class="status" id="status"></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Generated locally in your browser</footer>
+  <script>
+    const single = document.getElementById('single');
+    const list = document.getElementById('list');
+    const status = document.getElementById('status');
+
+    function uuid() {
+      if (crypto.randomUUID) return crypto.randomUUID();
+      const a = new Uint8Array(16);
+      crypto.getRandomValues(a);
+      a[6] = (a[6] & 0x0f) | 0x40;
+      a[8] = (a[8] & 0x3f) | 0x80;
+      const h = [...a].map(b => b.toString(16).padStart(2, '0'));
+      return `${h.slice(0,4).join('')}-${h.slice(4,6).join('')}-${h.slice(6,8).join('')}-${h.slice(8,10).join('')}-${h.slice(10,16).join('')}`;
+    }
+
+    function flash(msg) {
+      status.textContent = msg;
+      setTimeout(() => status.textContent = '', 2000);
+    }
+
+    function setSingle() { single.textContent = uuid(); }
+
+    document.getElementById('genBtn').addEventListener('click', setSingle);
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      if (!single.textContent || single.textContent === '—') return;
+      try { await navigator.clipboard.writeText(single.textContent); flash('Copied UUID.'); } catch (e) { flash('Could not copy.'); }
+    });
+
+    document.getElementById('bulkBtn').addEventListener('click', () => {
+      const n = Math.max(1, Math.min(100, parseInt(document.getElementById('count').value, 10) || 0));
+      list.innerHTML = '';
+      for (let i = 0; i < n; i++) {
+        const id = uuid();
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.textContent = id;
+        const btn = document.createElement('button');
+        btn.className = 'btn-ghost btn-sm';
+        btn.textContent = 'Copy';
+        btn.onclick = async () => {
+          try { await navigator.clipboard.writeText(id); btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1200); } catch (e) {}
+        };
+        li.appendChild(span);
+        li.appendChild(btn);
+        list.appendChild(li);
+      }
+      flash('Generated ' + n + ' UUIDs.');
+    });
+
+    document.getElementById('bulkCopyBtn').addEventListener('click', async () => {
+      const text = Array.from(list.querySelectorAll('span')).map(s => s.textContent).join('\n');
+      if (!text) return;
+      try { await navigator.clipboard.writeText(text); flash('Copied ' + list.children.length + ' UUIDs.'); } catch (e) { flash('Could not copy.'); }
+    });
+
+    setSingle();
+  </script>
+</body>
+</html>

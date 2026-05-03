@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gradient Generator — BkkBoost Tools</title>
+  <meta name="description" content="Build CSS linear and radial gradients with up to six color stops, live preview, and copy-ready CSS output.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .type-tabs {
+      display: inline-flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 4px;
+      gap: 2px;
+    }
+    .type-tab {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      padding: 7px 18px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .type-tab:hover { color: var(--text); }
+    .type-tab.active { background: var(--orange); color: white; }
+
+    .controls-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .angle-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 240px;
+    }
+    .angle-row label { margin: 0; min-width: 50px; }
+    .angle-row input[type=range] { flex: 1; }
+    .angle-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .stops-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .stop-row {
+      display: grid;
+      grid-template-columns: 50px 1fr 60px auto;
+      gap: 10px;
+      align-items: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+    }
+    @media (max-width: 600px) {
+      .stop-row { grid-template-columns: 50px 1fr auto; }
+      .stop-row .stop-pos-val { display: none; }
+    }
+    .stop-color {
+      width: 46px;
+      height: 32px;
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      padding: 0;
+      background: transparent;
+    }
+    .stop-pos-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+      text-align: right;
+    }
+    .stop-remove {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text3);
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.15s;
+    }
+    .stop-remove:hover { color: var(--red); border-color: var(--red); }
+    .stop-remove:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .preview-box {
+      width: 100%;
+      height: 280px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+    }
+
+    .sample-text {
+      margin-top: 14px;
+      padding: 28px 24px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+    }
+    .sample-text h3 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: white;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .sample-text p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.92);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .css-output {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-all;
+      line-height: 1.6;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .status { font-size: 12px; color: var(--text3); margin-left: auto; align-self: center; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Gradient Generator</h1>
+      <p class="tool-desc">Design CSS linear and radial gradients with live preview and copy-ready output.</p>
+    </div>
+
+    <div class="panel">
+      <div class="controls-top">
+        <div class="type-tabs" id="typeTabs">
+          <button class="type-tab active" data-type="linear">Linear</button>
+          <button class="type-tab" data-type="radial">Radial</button>
+        </div>
+        <div class="angle-row" id="angleRow">
+          <label for="angle">Angle</label>
+          <input type="range" id="angle" min="0" max="360" value="135">
+          <span class="angle-val" id="angleVal">135°</span>
+        </div>
+      </div>
+
+      <div class="panel-title">Color stops</div>
+      <div class="stops-list" id="stopsList"></div>
+      <button class="btn-secondary btn-sm" id="addStopBtn">+ Add stop</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Preview</div>
+      <div class="preview-box" id="previewBox"></div>
+      <div class="sample-text" id="sampleText">
+        <h3>Sample heading on gradient</h3>
+        <p>Body copy to check that text remains readable against the gradient you've designed.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">CSS</div>
+      <div class="css-output" id="cssOut"></div>
+      <div class="row-actions">
+        <button class="btn-primary" id="copyBtn">📋 Copy CSS</button>
+        <button class="btn-secondary" id="randomBtn">🎲 Randomize</button>
+        <span class="status" id="status"></span>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your data never leaves your device</footer>
+
+  <script>
+    const stopsList = document.getElementById('stopsList');
+    const addStopBtn = document.getElementById('addStopBtn');
+    const angle = document.getElementById('angle');
+    const angleVal = document.getElementById('angleVal');
+    const angleRow = document.getElementById('angleRow');
+    const typeTabs = document.querySelectorAll('.type-tab');
+    const previewBox = document.getElementById('previewBox');
+    const sampleText = document.getElementById('sampleText');
+    const cssOut = document.getElementById('cssOut');
+    const status = document.getElementById('status');
+    const MAX_STOPS = 6;
+
+    let type = 'linear';
+    let stops = [
+      { color: '#E8531A', pos: 0 },
+      { color: '#1B2A4A', pos: 100 }
+    ];
+
+    function renderStops() {
+      stopsList.innerHTML = '';
+      stops.forEach((stop, i) => {
+        const row = document.createElement('div');
+        row.className = 'stop-row';
+        row.innerHTML = `
+          <input type="color" class="stop-color" value="${stop.color}">
+          <input type="range" min="0" max="100" value="${stop.pos}" class="stop-pos">
+          <span class="stop-pos-val">${stop.pos}%</span>
+          <button class="stop-remove" title="Remove" ${stops.length <= 2 ? 'disabled' : ''}>✕</button>
+        `;
+        const colorEl = row.querySelector('.stop-color');
+        const posEl = row.querySelector('.stop-pos');
+        const posVal = row.querySelector('.stop-pos-val');
+        const removeBtn = row.querySelector('.stop-remove');
+
+        colorEl.addEventListener('input', () => { stops[i].color = colorEl.value; update(); });
+        posEl.addEventListener('input', () => {
+          stops[i].pos = parseInt(posEl.value, 10);
+          posVal.textContent = stops[i].pos + '%';
+          update();
+        });
+        removeBtn.addEventListener('click', () => {
+          if (stops.length <= 2) return;
+          stops.splice(i, 1);
+          renderStops();
+          update();
+        });
+        stopsList.appendChild(row);
+      });
+      addStopBtn.disabled = stops.length >= MAX_STOPS;
+      addStopBtn.textContent = stops.length >= MAX_STOPS ? `Max ${MAX_STOPS} stops` : '+ Add stop';
+    }
+
+    function gradientCss(prefix) {
+      const sortedStops = [...stops].sort((a, b) => a.pos - b.pos);
+      const stopStr = sortedStops.map(s => `${s.color} ${s.pos}%`).join(', ');
+      const fn = prefix ? `-webkit-${type}-gradient` : `${type}-gradient`;
+      if (type === 'linear') {
+        return `${fn}(${parseInt(angle.value, 10)}deg, ${stopStr})`;
+      }
+      return `${fn}(circle, ${stopStr})`;
+    }
+
+    function update() {
+      const css = gradientCss(false);
+      const webkit = gradientCss(true);
+      previewBox.style.background = css;
+      sampleText.style.background = css;
+
+      cssOut.textContent =
+        `background: ${webkit};\n` +
+        `background: ${css};`;
+    }
+
+    typeTabs.forEach(t => t.addEventListener('click', () => {
+      typeTabs.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      type = t.dataset.type;
+      angleRow.style.opacity = type === 'linear' ? '1' : '0.4';
+      angleRow.style.pointerEvents = type === 'linear' ? '' : 'none';
+      update();
+    }));
+
+    angle.addEventListener('input', () => {
+      angleVal.textContent = angle.value + '°';
+      update();
+    });
+
+    addStopBtn.addEventListener('click', () => {
+      if (stops.length >= MAX_STOPS) return;
+      const sorted = [...stops].sort((a, b) => a.pos - b.pos);
+      const last = sorted[sorted.length - 1];
+      const first = sorted[0];
+      const newPos = Math.round((first.pos + last.pos) / 2);
+      stops.push({ color: '#3B82F6', pos: newPos });
+      renderStops();
+      update();
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(cssOut.textContent);
+        status.textContent = 'CSS copied to clipboard.';
+        setTimeout(() => status.textContent = '', 1800);
+      } catch (e) {
+        status.textContent = 'Copy failed.';
+      }
+    });
+
+    document.getElementById('randomBtn').addEventListener('click', () => {
+      const n = 2 + Math.floor(Math.random() * 3); // 2–4 stops
+      stops = [];
+      for (let i = 0; i < n; i++) {
+        const r = Math.floor(Math.random() * 256);
+        const g = Math.floor(Math.random() * 256);
+        const b = Math.floor(Math.random() * 256);
+        const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+        stops.push({ color: hex, pos: Math.round((i / (n - 1)) * 100) });
+      }
+      angle.value = Math.floor(Math.random() * 361);
+      angleVal.textContent = angle.value + '°';
+      renderStops();
+      update();
+    });
+
+    renderStops();
+    update();
+  </script>
+</body>
+</html>

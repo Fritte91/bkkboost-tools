@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV Viewer & Editor — BkkBoost Tools</title>
+  <meta name="description" content="View, edit, sort, and export CSV files in your browser. No upload — everything stays on your device.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .input-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .stats-row {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 12px;
+    }
+    .stats-row strong { color: var(--text); font-weight: 500; }
+    .table-wrap {
+      overflow: auto;
+      max-height: 560px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    table.csv-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      font-family: 'DM Mono', monospace;
+      min-width: 100%;
+    }
+    table.csv-table th, table.csv-table td {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 0;
+      vertical-align: top;
+      min-width: 80px;
+    }
+    table.csv-table th {
+      background: var(--surface2);
+      color: var(--text);
+      font-weight: 500;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 8px 24px 8px 10px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    table.csv-table th:hover { background: var(--surface3); }
+    .sort-icon {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text3);
+      font-size: 10px;
+    }
+    table.csv-table th.sort-asc .sort-icon,
+    table.csv-table th.sort-desc .sort-icon { color: var(--orange); }
+    table.csv-table th { position: sticky; }
+    table.csv-table th .col-header { position: relative; padding-right: 12px; }
+    table.csv-table td .cell {
+      padding: 8px 10px;
+      outline: none;
+      min-height: 32px;
+      cursor: text;
+    }
+    table.csv-table td .cell:focus {
+      background: rgba(232,83,26,0.08);
+      box-shadow: inset 0 0 0 1px var(--orange);
+    }
+    table.csv-table tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+    .row-num {
+      background: var(--surface2);
+      color: var(--text3);
+      font-size: 11px;
+      text-align: right;
+      padding: 8px 10px;
+      width: 48px;
+      min-width: 48px;
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      border-right: 1px solid var(--border2);
+    }
+    th.row-num { z-index: 3; top: 0; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .or-divider {
+      text-align: center;
+      color: var(--text3);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin: 12px 0;
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>CSV Viewer &amp; Editor</h1>
+      <p class="tool-desc">View, sort, and edit CSV files in a browser table. Drop a file or paste text — nothing leaves your device.</p>
+    </div>
+
+    <div class="panel" id="loaderPanel">
+      <div class="dropzone" id="dz">
+        <div class="dropzone-icon">📊</div>
+        <div class="dropzone-title">Drop a .csv file or click to browse</div>
+        <div class="dropzone-subtitle">Comma-separated values, with or without header</div>
+        <input type="file" id="fileInput" accept=".csv,text/csv" hidden>
+      </div>
+      <div class="or-divider">or paste CSV text</div>
+      <textarea id="pasteInput" placeholder="name,age,city&#10;Jane,32,Bangkok&#10;Wit,28,Chiang Mai" style="min-height: 140px;"></textarea>
+      <div class="actions">
+        <button class="btn-primary" id="loadPasteBtn">Load pasted CSV</button>
+        <label style="display: inline-flex; align-items: center; gap: 8px; margin: 0;">
+          <input type="checkbox" id="hasHeader" checked style="width: auto;">
+          <span style="color: var(--text2); font-size: 13px;">First row is header</span>
+        </label>
+      </div>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="stats-row">
+        <span><strong id="rowCount">0</strong> rows</span>
+        <span><strong id="colCount">0</strong> columns</span>
+        <span id="fileNameStat" class="hidden">File: <strong id="fileName">—</strong></span>
+      </div>
+      <div class="table-wrap" id="tableWrap"></div>
+      <div class="actions">
+        <button class="btn-secondary" id="addRowBtn">+ Add Row</button>
+        <button class="btn-secondary" id="addColBtn">+ Add Column</button>
+        <button class="btn-primary" id="downloadBtn">⬇ Download CSV</button>
+        <button class="btn-secondary" id="copyTsvBtn">📋 Copy as TSV</button>
+        <button class="btn-ghost" id="resetBtn">Load different file</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const pasteInput = document.getElementById('pasteInput');
+    const loadPasteBtn = document.getElementById('loadPasteBtn');
+    const hasHeader = document.getElementById('hasHeader');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const loaderPanel = document.getElementById('loaderPanel');
+    const tableWrap = document.getElementById('tableWrap');
+    const rowCountEl = document.getElementById('rowCount');
+    const colCountEl = document.getElementById('colCount');
+    const fileNameEl = document.getElementById('fileName');
+    const fileNameStat = document.getElementById('fileNameStat');
+
+    let headers = [];
+    let rows = [];
+    let sortState = { col: null, dir: null }; // dir: 'asc' | 'desc'
+    let currentFileName = '';
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    // CSV parser: handles quoted fields, embedded commas, escaped "" quotes, CRLF
+    function parseCSV(text) {
+      const out = [];
+      let row = [];
+      let field = '';
+      let i = 0;
+      let inQuotes = false;
+      const n = text.length;
+      while (i < n) {
+        const ch = text[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+            inQuotes = false; i++; continue;
+          }
+          field += ch; i++; continue;
+        }
+        if (ch === '"') { inQuotes = true; i++; continue; }
+        if (ch === ',') { row.push(field); field = ''; i++; continue; }
+        if (ch === '\r') {
+          // swallow \r, may be followed by \n
+          if (text[i + 1] === '\n') i++;
+          row.push(field); field = '';
+          out.push(row); row = [];
+          i++; continue;
+        }
+        if (ch === '\n') {
+          row.push(field); field = '';
+          out.push(row); row = [];
+          i++; continue;
+        }
+        field += ch; i++;
+      }
+      // flush last
+      if (field !== '' || row.length) {
+        row.push(field);
+        out.push(row);
+      }
+      // Drop trailing empty row from a trailing newline
+      if (out.length && out[out.length - 1].length === 1 && out[out.length - 1][0] === '') out.pop();
+      return out;
+    }
+
+    function csvEscape(v) {
+      const s = v == null ? '' : String(v);
+      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function toCsv(headers, rows) {
+      const lines = [headers.map(csvEscape).join(',')];
+      for (const r of rows) {
+        const padded = headers.map((_, i) => r[i] == null ? '' : r[i]);
+        lines.push(padded.map(csvEscape).join(','));
+      }
+      return lines.join('\n');
+    }
+    function toTsv(headers, rows) {
+      const esc = v => (v == null ? '' : String(v).replace(/\t/g, ' ').replace(/\r?\n/g, ' '));
+      const lines = [headers.map(esc).join('\t')];
+      for (const r of rows) {
+        const padded = headers.map((_, i) => r[i] == null ? '' : r[i]);
+        lines.push(padded.map(esc).join('\t'));
+      }
+      return lines.join('\n');
+    }
+
+    function loadFromText(text, sourceName) {
+      clearError();
+      if (!text.trim()) { showError('No CSV content found.'); return; }
+      const grid = parseCSV(text);
+      if (!grid.length) { showError('Could not parse any rows.'); return; }
+      // Normalize widths to longest row
+      const width = grid.reduce((m, r) => Math.max(m, r.length), 0);
+      grid.forEach(r => { while (r.length < width) r.push(''); });
+      if (hasHeader.checked) {
+        headers = grid.shift();
+      } else {
+        headers = Array.from({ length: width }, (_, i) => 'Column ' + (i + 1));
+      }
+      // Ensure unique header labels for display (allow duplicates but tag)
+      rows = grid;
+      sortState = { col: null, dir: null };
+      currentFileName = sourceName || '';
+      if (currentFileName) {
+        fileNameEl.textContent = currentFileName;
+        fileNameStat.classList.remove('hidden');
+      } else {
+        fileNameStat.classList.add('hidden');
+      }
+      loaderPanel.classList.add('hidden');
+      workspace.classList.remove('hidden');
+      renderTable();
+    }
+
+    function renderTable() {
+      rowCountEl.textContent = rows.length;
+      colCountEl.textContent = headers.length;
+      const table = document.createElement('table');
+      table.className = 'csv-table';
+
+      const thead = document.createElement('thead');
+      const trH = document.createElement('tr');
+      const corner = document.createElement('th');
+      corner.className = 'row-num';
+      corner.textContent = '#';
+      corner.style.cursor = 'default';
+      trH.appendChild(corner);
+      headers.forEach((h, idx) => {
+        const th = document.createElement('th');
+        if (sortState.col === idx) th.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        const wrap = document.createElement('div');
+        wrap.className = 'col-header';
+        const label = document.createElement('span');
+        label.textContent = h;
+        label.contentEditable = 'true';
+        label.spellcheck = false;
+        label.style.outline = 'none';
+        label.addEventListener('click', e => e.stopPropagation());
+        label.addEventListener('input', () => { headers[idx] = label.textContent; });
+        const icon = document.createElement('span');
+        icon.className = 'sort-icon';
+        icon.textContent = sortState.col === idx ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
+        wrap.appendChild(label);
+        wrap.appendChild(icon);
+        th.appendChild(wrap);
+        th.addEventListener('click', () => sortBy(idx));
+        trH.appendChild(th);
+      });
+      thead.appendChild(trH);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      rows.forEach((r, ri) => {
+        const tr = document.createElement('tr');
+        const num = document.createElement('td');
+        num.className = 'row-num';
+        num.textContent = ri + 1;
+        tr.appendChild(num);
+        for (let ci = 0; ci < headers.length; ci++) {
+          const td = document.createElement('td');
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.contentEditable = 'true';
+          cell.spellcheck = false;
+          cell.textContent = r[ci] == null ? '' : r[ci];
+          cell.addEventListener('input', () => {
+            rows[ri][ci] = cell.textContent;
+          });
+          td.appendChild(cell);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+
+      tableWrap.innerHTML = '';
+      tableWrap.appendChild(table);
+    }
+
+    function sortBy(colIdx) {
+      let dir = 'asc';
+      if (sortState.col === colIdx) dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+      sortState = { col: colIdx, dir };
+      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+      rows.sort((a, b) => {
+        const av = a[colIdx] == null ? '' : a[colIdx];
+        const bv = b[colIdx] == null ? '' : b[colIdx];
+        return dir === 'asc' ? collator.compare(av, bv) : collator.compare(bv, av);
+      });
+      renderTable();
+    }
+
+    // File handlers
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => loadFromText(String(reader.result), file.name);
+      reader.onerror = () => showError('Could not read file.');
+      reader.readAsText(file);
+    }
+
+    loadPasteBtn.addEventListener('click', () => {
+      loadFromText(pasteInput.value, '');
+    });
+
+    document.getElementById('addRowBtn').addEventListener('click', () => {
+      rows.push(headers.map(() => ''));
+      renderTable();
+      tableWrap.scrollTop = tableWrap.scrollHeight;
+    });
+
+    document.getElementById('addColBtn').addEventListener('click', () => {
+      headers.push('Column ' + (headers.length + 1));
+      rows.forEach(r => r.push(''));
+      renderTable();
+      tableWrap.scrollLeft = tableWrap.scrollWidth;
+    });
+
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const csv = toCsv(headers, rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const base = currentFileName ? currentFileName.replace(/\.[^.]+$/, '') : 'data';
+      a.download = base + '-edited.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    const copyTsvBtn = document.getElementById('copyTsvBtn');
+    copyTsvBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(toTsv(headers, rows));
+        const o = copyTsvBtn.textContent;
+        copyTsvBtn.textContent = '✓ Copied';
+        setTimeout(() => copyTsvBtn.textContent = o, 1500);
+      } catch (e) { showError('Copy failed.'); }
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      headers = []; rows = []; currentFileName = '';
+      sortState = { col: null, dir: null };
+      tableWrap.innerHTML = '';
+      workspace.classList.add('hidden');
+      loaderPanel.classList.remove('hidden');
+      fileInput.value = '';
+      pasteInput.value = '';
+      clearError();
+    });
+  </script>
+</body>
+</html>

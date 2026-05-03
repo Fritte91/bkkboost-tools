@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Favicon Generator — BkkBoost Tools</title>
+  <meta name="description" content="Generate favicon and app-icon PNGs at every common size from a single source image.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    .icon-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 14px;
+    }
+    .icon-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      text-align: center;
+    }
+    .icon-preview {
+      background: #14141a;
+      border-radius: var(--radius-sm);
+      height: 110px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .icon-preview canvas { display: block; }
+    .icon-size {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+    .icon-purpose {
+      font-size: 11px;
+      color: var(--text3);
+      margin-bottom: 10px;
+    }
+    .icon-card .btn-secondary {
+      width: 100%;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Favicon Generator</h1>
+      <p class="tool-desc">Generate favicon and app-icon PNGs at every common size from a single source. Square images give the best results.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">🌐</div>
+      <div class="dropzone-title">Drop an image or click to browse</div>
+      <div class="dropzone-subtitle">Square PNG works best — at least 512×512</div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Generated icons</div>
+        <div class="icon-grid" id="iconGrid"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="zipBtn">⬇ Download All as ZIP</button>
+        <button class="btn-secondary" id="resetBtn">🔄 New image</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const iconGrid = document.getElementById('iconGrid');
+    const zipBtn = document.getElementById('zipBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const SIZES = [
+      { px: 16,  filename: 'favicon-16x16.png',          purpose: 'Browser tab' },
+      { px: 32,  filename: 'favicon-32x32.png',          purpose: 'Browser tab' },
+      { px: 48,  filename: 'favicon-48x48.png',          purpose: 'Windows site' },
+      { px: 64,  filename: 'favicon-64x64.png',          purpose: 'High-DPI tab' },
+      { px: 128, filename: 'favicon-128x128.png',        purpose: 'Web app' },
+      { px: 180, filename: 'apple-touch-icon.png',       purpose: 'Apple touch' },
+      { px: 192, filename: 'android-chrome-192x192.png', purpose: 'Android' },
+      { px: 512, filename: 'android-chrome-512x512.png', purpose: 'PWA splash' }
+    ];
+
+    let imageObj = null;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError();
+      if (!file.type.startsWith('image/')) { showError('Please choose an image file.'); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        imageObj = img;
+        URL.revokeObjectURL(url);
+        workspace.classList.remove('hidden');
+        generate();
+      };
+      img.onerror = () => showError('Could not decode this image.');
+      img.src = url;
+    }
+
+    function drawSquare(size) {
+      const sw = imageObj.naturalWidth, sh = imageObj.naturalHeight;
+      const minSide = Math.min(sw, sh);
+      const sx = (sw - minSide) / 2;
+      const sy = (sh - minSide) / 2;
+      const c = document.createElement('canvas');
+      c.width = size;
+      c.height = size;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(imageObj, sx, sy, minSide, minSide, 0, 0, size, size);
+      return c;
+    }
+
+    function generate() {
+      iconGrid.innerHTML = '';
+      SIZES.forEach(spec => {
+        const fullCanvas = drawSquare(spec.px);
+        const previewSize = Math.min(spec.px, 96);
+
+        const card = document.createElement('div');
+        card.className = 'icon-card';
+
+        const previewWrap = document.createElement('div');
+        previewWrap.className = 'icon-preview';
+        const previewCanvas = document.createElement('canvas');
+        previewCanvas.width = previewSize;
+        previewCanvas.height = previewSize;
+        previewCanvas.style.width = previewSize + 'px';
+        previewCanvas.style.height = previewSize + 'px';
+        previewCanvas.getContext('2d').drawImage(fullCanvas, 0, 0, previewSize, previewSize);
+        previewWrap.appendChild(previewCanvas);
+
+        const sizeLabel = document.createElement('div');
+        sizeLabel.className = 'icon-size';
+        sizeLabel.textContent = spec.px + ' × ' + spec.px;
+
+        const purposeLabel = document.createElement('div');
+        purposeLabel.className = 'icon-purpose';
+        purposeLabel.textContent = spec.purpose;
+
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'btn-secondary';
+        dlBtn.textContent = '⬇ Download';
+        dlBtn.addEventListener('click', () => {
+          fullCanvas.toBlob(blob => {
+            if (!blob) { showError('Could not encode PNG.'); return; }
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = spec.filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 0);
+          }, 'image/png');
+        });
+
+        card.appendChild(previewWrap);
+        card.appendChild(sizeLabel);
+        card.appendChild(purposeLabel);
+        card.appendChild(dlBtn);
+        iconGrid.appendChild(card);
+      });
+    }
+
+    zipBtn.addEventListener('click', async () => {
+      if (!imageObj) return;
+      clearError();
+      zipBtn.disabled = true;
+      const orig = zipBtn.textContent;
+      zipBtn.textContent = 'Building ZIP…';
+      try {
+        const zip = new JSZip();
+        for (const spec of SIZES) {
+          const canvas = drawSquare(spec.px);
+          const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+          if (blob) zip.file(spec.filename, blob);
+        }
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(zipBlob);
+        a.download = 'favicons.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      } catch (err) {
+        showError('Could not build ZIP: ' + err.message);
+      } finally {
+        zipBtn.disabled = false;
+        zipBtn.textContent = orig;
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      imageObj = null;
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      iconGrid.innerHTML = '';
+      clearError();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Split PDF — BkkBoost Tools</title>
+  <meta name="description" content="Extract specific pages from a PDF. Type a range or click thumbnails to pick.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <style>
+    .file-summary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .file-summary .file-icon { font-size: 22px; }
+    .file-summary-name { flex: 1; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-summary-meta { font-family: 'DM Mono', monospace; color: var(--text3); font-size: 12px; white-space: nowrap; }
+    .thumbs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 12px;
+    }
+    .thumb {
+      position: relative;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.15s;
+      aspect-ratio: 0.77;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .thumb canvas { max-width: 100%; max-height: 100%; display: block; }
+    .thumb:hover { border-color: var(--border2); }
+    .thumb.selected { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+    .thumb-num {
+      position: absolute;
+      bottom: 4px;
+      left: 4px;
+      background: rgba(0,0,0,0.75);
+      color: white;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+    }
+    .thumb-check {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(13,13,18,0.7);
+      border: 1.5px solid var(--border2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: transparent;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .thumb.selected .thumb-check {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: white;
+    }
+    .quick-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .quick-row .stat { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text2); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
+    .render-progress { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); margin-top: 8px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Split PDF</h1>
+      <p class="tool-desc">Extract specific pages. Type a range or click page thumbnails to pick.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">✂️</div>
+      <div class="dropzone-title">Drop a PDF or click to browse</div>
+      <div class="dropzone-subtitle">Single PDF file</div>
+      <input type="file" id="fileInput" accept="application/pdf" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="file-summary">
+          <span class="file-icon">📄</span>
+          <span class="file-summary-name" id="fileName"></span>
+          <span class="file-summary-meta" id="fileMeta"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Pages to extract</div>
+        <div class="stack">
+          <div>
+            <label for="rangeInput">Page ranges (e.g. 1-3, 5, 7-10)</label>
+            <input type="text" id="rangeInput" placeholder="1-3, 5, 7-10">
+          </div>
+          <div class="quick-row">
+            <button class="btn-secondary btn-sm" id="selectAll">All</button>
+            <button class="btn-secondary btn-sm" id="selectNone">None</button>
+            <button class="btn-secondary btn-sm" id="selectOdd">Odd</button>
+            <button class="btn-secondary btn-sm" id="selectEven">Even</button>
+            <span class="stat" id="selCount">0 selected</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Pages</div>
+        <div class="thumbs" id="thumbs"></div>
+        <div class="render-progress hidden" id="renderProgress"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="extractBtn">⬇ Extract & Download</button>
+        <button class="btn-secondary" id="resetBtn">🔄 New PDF</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const { PDFDocument } = PDFLib;
+
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const fileNameEl = document.getElementById('fileName');
+    const fileMetaEl = document.getElementById('fileMeta');
+    const rangeInput = document.getElementById('rangeInput');
+    const thumbsEl = document.getElementById('thumbs');
+    const selCountEl = document.getElementById('selCount');
+    const extractBtn = document.getElementById('extractBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const renderProgress = document.getElementById('renderProgress');
+
+    let originalFile = null;
+    let originalBytes = null;
+    let pageCount = 0;
+    let selected = new Set();
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+      return (b/1024/1024).toFixed(2) + ' MB';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    async function loadFile(file) {
+      clearError();
+      if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+        showError('Please choose a PDF file.');
+        return;
+      }
+      try {
+        originalFile = file;
+        originalBytes = new Uint8Array(await file.arrayBuffer());
+        const pdf = await pdfjsLib.getDocument({ data: originalBytes.slice() }).promise;
+        pageCount = pdf.numPages;
+        fileNameEl.textContent = file.name;
+        fileMetaEl.textContent = `${pageCount} pages · ${fmtSize(file.size)}`;
+        selected = new Set();
+        for (let i = 1; i <= pageCount; i++) selected.add(i);
+        syncRangeFromSelection();
+        workspace.classList.remove('hidden');
+        thumbsEl.innerHTML = '';
+        renderProgress.classList.remove('hidden');
+        for (let i = 1; i <= pageCount; i++) {
+          renderProgress.textContent = `Rendering thumbnail ${i} / ${pageCount}…`;
+          await renderThumb(pdf, i);
+        }
+        renderProgress.classList.add('hidden');
+        updateSelectionUI();
+      } catch (err) {
+        showError('Could not read this PDF. ' + (err.message || ''));
+      }
+    }
+
+    async function renderThumb(pdf, pageNum) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 0.4 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const wrap = document.createElement('div');
+      wrap.className = 'thumb';
+      wrap.dataset.page = pageNum;
+      wrap.appendChild(canvas);
+      const num = document.createElement('div');
+      num.className = 'thumb-num';
+      num.textContent = pageNum;
+      wrap.appendChild(num);
+      const check = document.createElement('div');
+      check.className = 'thumb-check';
+      check.textContent = '✓';
+      wrap.appendChild(check);
+      wrap.addEventListener('click', () => {
+        if (selected.has(pageNum)) selected.delete(pageNum);
+        else selected.add(pageNum);
+        syncRangeFromSelection();
+        updateSelectionUI();
+      });
+      thumbsEl.appendChild(wrap);
+    }
+
+    function parseRanges(str, max) {
+      const result = new Set();
+      if (!str.trim()) return result;
+      const parts = str.split(/[,\s]+/).filter(Boolean);
+      for (const p of parts) {
+        if (/^\d+$/.test(p)) {
+          const n = +p;
+          if (n >= 1 && n <= max) result.add(n);
+        } else {
+          const m = p.match(/^(\d+)\s*-\s*(\d+)$/);
+          if (m) {
+            let a = +m[1], b = +m[2];
+            if (a > b) [a, b] = [b, a];
+            for (let i = Math.max(1, a); i <= Math.min(max, b); i++) result.add(i);
+          } else {
+            return null;
+          }
+        }
+      }
+      return result;
+    }
+
+    function selectionToRangeString(sel) {
+      const sorted = [...sel].sort((a, b) => a - b);
+      if (!sorted.length) return '';
+      const out = [];
+      let start = sorted[0], prev = sorted[0];
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i] === prev + 1) prev = sorted[i];
+        else {
+          out.push(start === prev ? `${start}` : `${start}-${prev}`);
+          start = prev = sorted[i];
+        }
+      }
+      out.push(start === prev ? `${start}` : `${start}-${prev}`);
+      return out.join(', ');
+    }
+
+    function syncRangeFromSelection() {
+      rangeInput.value = selectionToRangeString(selected);
+    }
+
+    function updateSelectionUI() {
+      thumbsEl.querySelectorAll('.thumb').forEach(t => {
+        const n = +t.dataset.page;
+        t.classList.toggle('selected', selected.has(n));
+      });
+      selCountEl.textContent = `${selected.size} of ${pageCount} selected`;
+      extractBtn.disabled = selected.size === 0;
+    }
+
+    rangeInput.addEventListener('input', () => {
+      const parsed = parseRanges(rangeInput.value, pageCount);
+      if (parsed === null) return;
+      selected = parsed;
+      updateSelectionUI();
+    });
+
+    document.getElementById('selectAll').addEventListener('click', () => {
+      selected = new Set();
+      for (let i = 1; i <= pageCount; i++) selected.add(i);
+      syncRangeFromSelection();
+      updateSelectionUI();
+    });
+    document.getElementById('selectNone').addEventListener('click', () => {
+      selected = new Set();
+      syncRangeFromSelection();
+      updateSelectionUI();
+    });
+    document.getElementById('selectOdd').addEventListener('click', () => {
+      selected = new Set();
+      for (let i = 1; i <= pageCount; i += 2) selected.add(i);
+      syncRangeFromSelection();
+      updateSelectionUI();
+    });
+    document.getElementById('selectEven').addEventListener('click', () => {
+      selected = new Set();
+      for (let i = 2; i <= pageCount; i += 2) selected.add(i);
+      syncRangeFromSelection();
+      updateSelectionUI();
+    });
+
+    extractBtn.addEventListener('click', async () => {
+      if (!selected.size) return;
+      extractBtn.disabled = true;
+      const orig = extractBtn.innerHTML;
+      extractBtn.innerHTML = '<span class="spinner"></span> Extracting...';
+      clearError();
+      try {
+        const src = await PDFDocument.load(originalBytes.slice(), { ignoreEncryption: true });
+        const out = await PDFDocument.create();
+        const indices = [...selected].sort((a, b) => a - b).map(n => n - 1);
+        const pages = await out.copyPages(src, indices);
+        pages.forEach(p => out.addPage(p));
+        const bytes = await out.save();
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const baseName = originalFile.name.replace(/\.[^.]+$/, '');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = baseName + '-extracted.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      } catch (err) {
+        showError('Failed to extract pages. ' + (err.message || ''));
+      } finally {
+        extractBtn.innerHTML = orig;
+        extractBtn.disabled = selected.size === 0;
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      originalFile = null;
+      originalBytes = null;
+      pageCount = 0;
+      selected = new Set();
+      workspace.classList.add('hidden');
+      thumbsEl.innerHTML = '';
+      rangeInput.value = '';
+      fileInput.value = '';
+      clearError();
+    });
+  </script>
+</body>
+</html>

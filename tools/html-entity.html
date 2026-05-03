@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML Entity Encoder — BkkBoost Tools</title>
+  <meta name="description" content="Encode and decode HTML entities. Live two-way conversion.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .twin { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+    .opt-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-top: 12px; padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .opt-row input { width: auto; }
+    .opt-row label { margin: 0; cursor: pointer; color: var(--text); font-size: 13px; }
+    .status { font-size: 12px; color: var(--text3); margin-top: 8px; min-height: 16px; text-align: center; }
+    .status.err { color: #FCA5A5; }
+    @media (max-width: 720px) { .twin { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>HTML Entity Encoder</h1>
+      <p class="tool-desc">Convert special characters to HTML entities (&amp;amp;, &amp;lt;, etc.) and back.</p>
+    </div>
+
+    <div class="panel">
+      <div class="twin">
+        <div>
+          <label for="plain">Plain text / HTML</label>
+          <textarea id="plain" placeholder="<div>Hello & world</div>" style="min-height: 220px;"></textarea>
+        </div>
+        <div>
+          <label for="encoded">Encoded entities</label>
+          <textarea id="encoded" placeholder="&lt;div&gt;Hello &amp; world&lt;/div&gt;" style="min-height: 220px;"></textarea>
+        </div>
+      </div>
+      <div class="opt-row">
+        <input type="checkbox" id="optAll">
+        <label for="optAll">Also encode non-ASCII characters as numeric entities</label>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="encBtn">→ Encode</button>
+        <button class="btn-primary" id="decBtn">← Decode</button>
+        <button class="btn-secondary" id="copyPlainBtn">📋 Copy plain</button>
+        <button class="btn-secondary" id="copyEncBtn">📋 Copy entities</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side</footer>
+  <script>
+    const plain = document.getElementById('plain');
+    const encoded = document.getElementById('encoded');
+    const optAll = document.getElementById('optAll');
+    const status = document.getElementById('status');
+
+    function setStatus(msg, isErr) {
+      status.textContent = msg;
+      status.className = 'status' + (isErr ? ' err' : '');
+      if (msg) setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2200);
+    }
+
+    const NAMED = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+
+    function encodeEntities(s) {
+      let out = s.replace(/[&<>"']/g, c => NAMED[c]);
+      if (optAll.checked) {
+        out = out.replace(/[-￿]/g, c => '&#' + c.charCodeAt(0) + ';');
+      }
+      return out;
+    }
+
+    function decodeEntities(s) {
+      const ta = document.createElement('textarea');
+      ta.innerHTML = s;
+      return ta.value;
+    }
+
+    let lock = false;
+    function encode() {
+      if (lock) return;
+      lock = true;
+      try { encoded.value = encodeEntities(plain.value); } finally { lock = false; }
+    }
+    function decode() {
+      if (lock) return;
+      lock = true;
+      try { plain.value = decodeEntities(encoded.value); } finally { lock = false; }
+    }
+
+    plain.addEventListener('input', encode);
+    encoded.addEventListener('input', decode);
+    optAll.addEventListener('change', encode);
+    document.getElementById('encBtn').addEventListener('click', () => { encode(); setStatus('Encoded.'); });
+    document.getElementById('decBtn').addEventListener('click', () => { decode(); setStatus('Decoded.'); });
+
+    async function copy(val, msg) {
+      if (!val) return;
+      try { await navigator.clipboard.writeText(val); setStatus(msg); } catch (e) { setStatus('Copy failed.', true); }
+    }
+    document.getElementById('copyPlainBtn').addEventListener('click', () => copy(plain.value, 'Plain copied.'));
+    document.getElementById('copyEncBtn').addEventListener('click', () => copy(encoded.value, 'Entities copied.'));
+    document.getElementById('clearBtn').addEventListener('click', () => { plain.value = ''; encoded.value = ''; });
+  </script>
+</body>
+</html>

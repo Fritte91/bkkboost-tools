@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BkkBoost Tools — Free Browser-Based Utilities</title>
+  <meta name="description" content="47 free online tools that run entirely in your browser. Image compression, PDF merge, QR codes, JSON formatting, and more. No uploads, no signups.">
+  <link rel="stylesheet" href="shared.css">
+</head>
+<body>
+
+  <header class="toolbar">
+    <a href="index.html" class="back-link" style="visibility:hidden">← All Tools</a>
+    <div class="toolbar-brand">
+      <div class="logo">Bkk<span>Boost</span></div>
+      <div class="logo-tag">TOOLS</div>
+    </div>
+    <a href="https://bkkboost.com" target="_blank" rel="noopener" class="back-link">bkkboost.com →</a>
+  </header>
+
+  <main class="landing">
+
+    <section class="hero">
+      <h1>BkkBoost <span class="accent">Tools</span></h1>
+      <p>47 free browser tools. Image compression, PDF merge, QR codes, JSON formatting, and more — all running 100% in your browser. No uploads, no signups.</p>
+
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="search" type="text" placeholder="Search 47 tools…" autocomplete="off" spellcheck="false">
+      </div>
+    </section>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-cat="All">All</button>
+      <button class="tab" data-cat="Image">Image</button>
+      <button class="tab" data-cat="PDF">PDF</button>
+      <button class="tab" data-cat="QR">QR</button>
+      <button class="tab" data-cat="Text">Text</button>
+      <button class="tab" data-cat="Color">Color</button>
+      <button class="tab" data-cat="Developer">Developer</button>
+      <button class="tab" data-cat="Data">Data</button>
+      <button class="tab" data-cat="Utility">Utilities</button>
+    </nav>
+
+    <section class="grid" id="grid"></section>
+
+  </main>
+
+  <footer class="footer">
+    BkkBoost Tools · 100% client-side · Your files never leave your device
+  </footer>
+
+  <script>
+    const tools = [
+      // IMAGE TOOLS
+      { id: "bg-remover", name: "BG Remover", desc: "Remove background from photos using AI", cat: "Image", icon: "✂️" },
+      { id: "image-compressor", name: "Image Compressor", desc: "Reduce image file size with quality control", cat: "Image", icon: "📦" },
+      { id: "image-resizer", name: "Image Resizer", desc: "Resize to custom or social media dimensions", cat: "Image", icon: "↔️" },
+      { id: "image-converter", name: "Image Converter", desc: "Convert between PNG, JPG, WebP, GIF", cat: "Image", icon: "🔄" },
+      { id: "image-cropper", name: "Image Cropper", desc: "Crop with freeform or preset aspect ratios", cat: "Image", icon: "🔲" },
+      { id: "image-to-base64", name: "Image to Base64", desc: "Encode images to Base64 data strings", cat: "Image", icon: "🔣" },
+      { id: "bulk-image-rename", name: "Bulk Image Rename", desc: "Rename and download multiple images at once", cat: "Image", icon: "📁" },
+
+      // PDF TOOLS
+      { id: "pdf-compressor", name: "PDF Compressor", desc: "Reduce PDF file size", cat: "PDF", icon: "📄" },
+      { id: "merge-pdf", name: "Merge PDFs", desc: "Combine multiple PDFs into one file", cat: "PDF", icon: "📑" },
+      { id: "split-pdf", name: "Split PDF", desc: "Extract specific pages from a PDF", cat: "PDF", icon: "✂️" },
+      { id: "pdf-to-images", name: "PDF to Images", desc: "Convert PDF pages to PNG or JPG", cat: "PDF", icon: "🖼" },
+      { id: "images-to-pdf", name: "Images to PDF", desc: "Combine images into a single PDF", cat: "PDF", icon: "📄" },
+      { id: "pdf-page-rotator", name: "PDF Page Rotator", desc: "Rotate individual pages in a PDF", cat: "PDF", icon: "🔃" },
+
+      // QR & BARCODE
+      { id: "qr-generator", name: "QR Code Generator", desc: "Generate QR codes for URLs, text, WiFi, vCard", cat: "QR", icon: "📱" },
+      { id: "qr-reader", name: "QR Code Reader", desc: "Read QR codes from camera or image upload", cat: "QR", icon: "📷" },
+      { id: "barcode-generator", name: "Barcode Generator", desc: "Generate EAN, UPC, Code128, and more", cat: "QR", icon: "▮▯▮" },
+
+      // TEXT & CONTENT
+      { id: "word-counter", name: "Word Counter", desc: "Count words, characters, sentences, reading time", cat: "Text", icon: "🔢" },
+      { id: "case-converter", name: "Case Converter", desc: "Convert between UPPER, lower, Title, camelCase", cat: "Text", icon: "Aa" },
+      { id: "lorem-generator", name: "Lorem Ipsum Generator", desc: "Generate placeholder text by paragraphs or words", cat: "Text", icon: "📝" },
+      { id: "markdown-preview", name: "Markdown Preview", desc: "Live editor with rendered HTML preview", cat: "Text", icon: "📖" },
+      { id: "text-diff", name: "Text Diff Checker", desc: "Compare two texts and highlight differences", cat: "Text", icon: "⇔" },
+      { id: "find-replace", name: "Find & Replace", desc: "Find and replace text with regex support", cat: "Text", icon: "🔍" },
+
+      // COLOR & DESIGN
+      { id: "color-picker", name: "Color Picker", desc: "Pick and convert between HEX, RGB, HSL", cat: "Color", icon: "🎨" },
+      { id: "palette-from-image", name: "Palette from Image", desc: "Extract dominant colors from any image", cat: "Color", icon: "🖌" },
+      { id: "gradient-generator", name: "Gradient Generator", desc: "Create CSS gradients with live preview", cat: "Color", icon: "🌈" },
+      { id: "contrast-checker", name: "Contrast Checker", desc: "Check WCAG accessibility color contrast", cat: "Color", icon: "👁" },
+
+      // DEVELOPER TOOLS
+      { id: "json-formatter", name: "JSON Formatter", desc: "Format, validate, and minify JSON", cat: "Developer", icon: "{}" },
+      { id: "json-csv", name: "JSON ↔ CSV", desc: "Convert between JSON and CSV formats", cat: "Developer", icon: "⇄" },
+      { id: "base64", name: "Base64 Encode/Decode", desc: "Encode or decode Base64 strings", cat: "Developer", icon: "🔐" },
+      { id: "url-encoder", name: "URL Encode/Decode", desc: "Encode or decode URL components", cat: "Developer", icon: "🔗" },
+      { id: "hash-generator", name: "Hash Generator", desc: "Generate MD5, SHA-1, SHA-256 hashes", cat: "Developer", icon: "#️" },
+      { id: "uuid-generator", name: "UUID Generator", desc: "Generate v4 UUIDs in bulk", cat: "Developer", icon: "🆔" },
+      { id: "regex-tester", name: "Regex Tester", desc: "Test regular expressions with live highlighting", cat: "Developer", icon: ".*" },
+      { id: "html-entity", name: "HTML Entity Encoder", desc: "Encode and decode HTML entities", cat: "Developer", icon: "&;" },
+      { id: "jwt-decoder", name: "JWT Decoder", desc: "Decode and inspect JWT tokens", cat: "Developer", icon: "🎟" },
+      { id: "timestamp-converter", name: "Timestamp Converter", desc: "Convert between Unix timestamps and dates", cat: "Developer", icon: "⏱" },
+
+      // FILE & DATA
+      { id: "csv-viewer", name: "CSV Viewer & Editor", desc: "View and edit CSV files in a table", cat: "Data", icon: "📊" },
+      { id: "excel-to-csv", name: "Excel to CSV", desc: "Convert .xlsx files to CSV format", cat: "Data", icon: "📗" },
+      { id: "spreadsheet-viewer", name: "Spreadsheet Viewer", desc: "Preview .xlsx files without Excel", cat: "Data", icon: "📋" },
+
+      // EVERYDAY UTILITIES
+      { id: "unit-converter", name: "Unit Converter", desc: "Convert length, weight, temperature, and more", cat: "Utility", icon: "📏" },
+      { id: "calculator", name: "Scientific Calculator", desc: "Calculator with scientific functions", cat: "Utility", icon: "🧮" },
+      { id: "pomodoro", name: "Pomodoro Timer", desc: "Focus timer with work and break intervals", cat: "Utility", icon: "🍅" },
+      { id: "screen-ruler", name: "Screen Ruler", desc: "Measure pixel distances on screen", cat: "Utility", icon: "📐" },
+      { id: "favicon-generator", name: "Favicon Generator", desc: "Generate .ico and all sizes from one image", cat: "Utility", icon: "🌐" },
+      { id: "og-preview", name: "OG Preview", desc: "Preview how links appear on social media", cat: "Utility", icon: "🔖" },
+      { id: "password-generator", name: "Password Generator", desc: "Generate secure random passwords", cat: "Utility", icon: "🔑" },
+      { id: "invoice-generator", name: "Invoice Generator", desc: "Create and download PDF invoices", cat: "Utility", icon: "🧾" },
+    ];
+
+    const grid = document.getElementById('grid');
+    const search = document.getElementById('search');
+    const tabs = document.getElementById('tabs');
+
+    let activeCat = 'All';
+    let query = '';
+
+    function badgeClass(cat) {
+      return 'badge badge-' + cat.toLowerCase();
+    }
+
+    function render() {
+      const q = query.trim().toLowerCase();
+      const filtered = tools.filter(t => {
+        const matchCat = activeCat === 'All' || t.cat === activeCat;
+        if (!matchCat) return false;
+        if (!q) return true;
+        return t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q);
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🔎</div>
+            <div>No tools found${q ? ` for "${escapeHtml(q)}"` : ''}.</div>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(t => `
+        <a class="tool-card" href="tools/${t.id}.html">
+          <span class="tool-card-icon">${t.icon}</span>
+          <div class="tool-card-name">${escapeHtml(t.name)}</div>
+          <div class="tool-card-desc">${escapeHtml(t.desc)}</div>
+          <span class="${badgeClass(t.cat)}">${t.cat}</span>
+        </a>
+      `).join('');
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    search.addEventListener('input', e => {
+      query = e.target.value;
+      render();
+    });
+
+    tabs.addEventListener('click', e => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      tabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      activeCat = btn.dataset.cat;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>

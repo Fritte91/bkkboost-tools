@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Barcode Generator — BkkBoost Tools</title>
+  <meta name="description" content="Generate barcodes in CODE128, EAN-13, EAN-8, UPC-A, CODE39, and ITF-14 formats. Customize bar width, height, and text.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <style>
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: end;
+    }
+    .controls-grid > .full { grid-column: 1 / -1; }
+    .slider-row { display: flex; align-items: center; gap: 12px; }
+    .slider-row input[type=range] { flex: 1; }
+    .slider-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      min-width: 56px;
+      text-align: right;
+    }
+    .toggle-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .toggle-row input { width: auto; }
+    .toggle-row label { margin: 0; cursor: pointer; color: var(--text); font-size: 14px; flex: 1; }
+    .barcode-stage {
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 160px;
+      align-items: center;
+      overflow: auto;
+    }
+    .barcode-stage svg { display: block; max-width: 100%; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+    @media (max-width: 600px) {
+      .controls-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Barcode Generator</h1>
+      <p class="tool-desc">Generate barcodes in CODE128, EAN, UPC-A, CODE39, and ITF-14. Live SVG preview, PNG and SVG export.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Content</div>
+      <div class="controls-grid">
+        <div class="full">
+          <label for="textInput">Text or number</label>
+          <input type="text" id="textInput" value="123456789012" placeholder="Type or paste content">
+        </div>
+        <div class="full">
+          <label for="formatSel">Format</label>
+          <select id="formatSel">
+            <option value="CODE128" selected>CODE128 (alphanumeric, default)</option>
+            <option value="EAN13">EAN-13 (12–13 digits)</option>
+            <option value="EAN8">EAN-8 (7–8 digits)</option>
+            <option value="UPC">UPC-A (11–12 digits)</option>
+            <option value="CODE39">CODE39 (alphanumeric)</option>
+            <option value="ITF14">ITF-14 (13–14 digits)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Style</div>
+      <div class="controls-grid">
+        <div>
+          <label for="widthRange">Bar width <span style="color: var(--text3);">(<span id="widthVal">2</span>px)</span></label>
+          <div class="slider-row">
+            <input type="range" id="widthRange" min="1" max="6" step="0.5" value="2">
+          </div>
+        </div>
+        <div>
+          <label for="heightRange">Height <span style="color: var(--text3);">(<span id="heightVal">100</span>px)</span></label>
+          <div class="slider-row">
+            <input type="range" id="heightRange" min="40" max="240" step="5" value="100">
+          </div>
+        </div>
+        <div>
+          <label for="fontSizeRange">Text size <span style="color: var(--text3);">(<span id="fontVal">20</span>px)</span></label>
+          <div class="slider-row">
+            <input type="range" id="fontSizeRange" min="10" max="36" step="1" value="20">
+          </div>
+        </div>
+        <div>
+          <div class="toggle-row">
+            <input type="checkbox" id="showText" checked>
+            <label for="showText">Show text below barcode</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div class="panel">
+      <div class="panel-title">Preview</div>
+      <div class="barcode-stage" id="barcodeStage">
+        <svg id="barcodeSvg"></svg>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="downloadPngBtn">⬇ Download PNG</button>
+        <button class="btn-secondary" id="downloadSvgBtn">⬇ Download SVG</button>
+        <button class="btn-secondary" id="copySvgBtn">📋 Copy SVG</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const textInput = document.getElementById('textInput');
+    const formatSel = document.getElementById('formatSel');
+    const widthRange = document.getElementById('widthRange');
+    const heightRange = document.getElementById('heightRange');
+    const fontSizeRange = document.getElementById('fontSizeRange');
+    const showText = document.getElementById('showText');
+    const widthVal = document.getElementById('widthVal');
+    const heightVal = document.getElementById('heightVal');
+    const fontVal = document.getElementById('fontVal');
+    const barcodeSvg = document.getElementById('barcodeSvg');
+    const errorBar = document.getElementById('errorBar');
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    function render() {
+      clearError();
+      const text = textInput.value;
+      if (!text) {
+        barcodeSvg.innerHTML = '';
+        showError('Enter content to generate a barcode.');
+        return;
+      }
+      try {
+        JsBarcode(barcodeSvg, text, {
+          format: formatSel.value,
+          width: parseFloat(widthRange.value),
+          height: parseInt(heightRange.value, 10),
+          displayValue: showText.checked,
+          fontSize: parseInt(fontSizeRange.value, 10),
+          font: 'DM Mono, monospace',
+          background: '#FFFFFF',
+          lineColor: '#000000',
+          margin: 10,
+          valid: (valid) => {
+            if (!valid) showError('Input is not valid for ' + formatSel.value + '.');
+          }
+        });
+      } catch (e) {
+        showError('Could not generate barcode: ' + (e.message || e));
+        barcodeSvg.innerHTML = '';
+      }
+    }
+
+    function getCurrentSvgString() {
+      if (!barcodeSvg.childNodes.length) return '';
+      // Clone & ensure xmlns set for standalone use
+      const clone = barcodeSvg.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      return new XMLSerializer().serializeToString(clone);
+    }
+
+    document.getElementById('downloadSvgBtn').addEventListener('click', () => {
+      const svg = getCurrentSvgString();
+      if (!svg) return;
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'barcode-' + formatSel.value.toLowerCase() + '.svg';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    document.getElementById('downloadPngBtn').addEventListener('click', () => {
+      const svg = getCurrentSvgString();
+      if (!svg) return;
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Render at 2x for crisp PNG
+        const scale = 2;
+        canvas.width = img.naturalWidth * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(b);
+          a.download = 'barcode-' + formatSel.value.toLowerCase() + '.png';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 0);
+        });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); showError('Could not export PNG.'); };
+      img.src = url;
+    });
+
+    const copySvgBtn = document.getElementById('copySvgBtn');
+    copySvgBtn.addEventListener('click', async () => {
+      const svg = getCurrentSvgString();
+      if (!svg) return;
+      try {
+        await navigator.clipboard.writeText(svg);
+        const o = copySvgBtn.textContent;
+        copySvgBtn.textContent = '✓ Copied';
+        setTimeout(() => copySvgBtn.textContent = o, 1500);
+      } catch (e) { showError('Copy failed.'); }
+    });
+
+    [textInput, formatSel, widthRange, heightRange, fontSizeRange, showText].forEach(el => {
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+    widthRange.addEventListener('input', () => widthVal.textContent = widthRange.value);
+    heightRange.addEventListener('input', () => heightVal.textContent = heightRange.value);
+    fontSizeRange.addEventListener('input', () => fontVal.textContent = fontSizeRange.value);
+
+    // initial render
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Resizer — BkkBoost Tools</title>
+  <meta name="description" content="Resize images to custom dimensions or one-tap social media presets in your browser.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .preset-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .preset-btn:hover { color: var(--text); border-color: var(--text3); }
+    .preset-btn.active { background: var(--orange); border-color: var(--orange); color: white; }
+    .dim-row {
+      display: grid;
+      grid-template-columns: 1fr 44px 1fr;
+      gap: 10px;
+      align-items: end;
+    }
+    .lock-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      width: 44px;
+      height: 38px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.15s;
+    }
+    .lock-btn.locked { color: var(--orange); border-color: var(--orange); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Image Resizer</h1>
+      <p class="tool-desc">Resize images to custom dimensions or one-tap social-media presets.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">↔️</div>
+      <div class="dropzone-title">Drop an image or click to browse</div>
+      <div class="dropzone-subtitle">PNG, JPEG, WebP, GIF</div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Dimensions</div>
+        <div class="dim-row">
+          <div>
+            <label for="widthIn">Width (px)</label>
+            <input type="number" id="widthIn" min="1">
+          </div>
+          <button class="lock-btn locked" id="lockBtn" title="Lock aspect ratio">🔗</button>
+          <div>
+            <label for="heightIn">Height (px)</label>
+            <input type="number" id="heightIn" min="1">
+          </div>
+        </div>
+        <div class="preset-row" id="presets">
+          <button class="preset-btn" data-w="1080" data-h="1080">Instagram 1080×1080</button>
+          <button class="preset-btn" data-w="1200" data-h="630">Facebook 1200×630</button>
+          <button class="preset-btn" data-w="1600" data-h="900">Twitter 1600×900</button>
+          <button class="preset-btn" data-w="1280" data-h="720">YouTube 1280×720</button>
+          <button class="preset-btn" data-w="1200" data-h="627">LinkedIn 1200×627</button>
+          <button class="preset-btn" data-custom="1">Custom</button>
+        </div>
+      </div>
+
+      <div class="preview-grid">
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Original</span>
+            <span class="preview-size" id="origDim">—</span>
+          </div>
+          <img id="origImg" alt="Original">
+        </div>
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Resized</span>
+            <span class="preview-size" id="newDim">—</span>
+          </div>
+          <img id="newImg" alt="Resized">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="downloadBtn">⬇ Download</button>
+        <button class="btn-secondary" id="resetBtn">🔄 New image</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const widthIn = document.getElementById('widthIn');
+    const heightIn = document.getElementById('heightIn');
+    const lockBtn = document.getElementById('lockBtn');
+    const presets = document.getElementById('presets');
+    const origImg = document.getElementById('origImg');
+    const newImg = document.getElementById('newImg');
+    const origDim = document.getElementById('origDim');
+    const newDim = document.getElementById('newDim');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let originalFile = null;
+    let originalImage = null;
+    let resizedBlob = null;
+    let aspect = 1;
+    let locked = true;
+    let mimeType = 'image/png';
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError();
+      if (!file.type.startsWith('image/')) { showError('Please choose an image file.'); return; }
+      originalFile = file;
+      mimeType = file.type === 'image/gif' ? 'image/png' : (file.type || 'image/png');
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        originalImage = img;
+        if (origImg.src) URL.revokeObjectURL(origImg.src);
+        origImg.src = url;
+        aspect = img.naturalWidth / img.naturalHeight;
+        widthIn.value = img.naturalWidth;
+        heightIn.value = img.naturalHeight;
+        origDim.textContent = img.naturalWidth + ' × ' + img.naturalHeight;
+        workspace.classList.remove('hidden');
+        clearActivePreset();
+        resize();
+      };
+      img.onerror = () => showError('Could not decode this image.');
+      img.src = url;
+    }
+
+    let resizeTimer;
+    function scheduleResize() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 120);
+    }
+
+    widthIn.addEventListener('input', () => {
+      if (locked && originalImage) {
+        const w = parseInt(widthIn.value || '0', 10);
+        heightIn.value = Math.max(1, Math.round(w / aspect));
+      }
+      clearActivePreset();
+      scheduleResize();
+    });
+    heightIn.addEventListener('input', () => {
+      if (locked && originalImage) {
+        const h = parseInt(heightIn.value || '0', 10);
+        widthIn.value = Math.max(1, Math.round(h * aspect));
+      }
+      clearActivePreset();
+      scheduleResize();
+    });
+    lockBtn.addEventListener('click', () => {
+      locked = !locked;
+      lockBtn.classList.toggle('locked', locked);
+      lockBtn.textContent = locked ? '🔗' : '🔓';
+    });
+
+    presets.addEventListener('click', e => {
+      const btn = e.target.closest('.preset-btn');
+      if (!btn) return;
+      [...presets.children].forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.custom) { widthIn.focus(); return; }
+      widthIn.value = btn.dataset.w;
+      heightIn.value = btn.dataset.h;
+      resize();
+    });
+    function clearActivePreset() { [...presets.children].forEach(b => b.classList.remove('active')); }
+
+    function resize() {
+      if (!originalImage) return;
+      const w = parseInt(widthIn.value, 10);
+      const h = parseInt(heightIn.value, 10);
+      if (!w || !h || w < 1 || h < 1) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (mimeType === 'image/jpeg') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(originalImage, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        resizedBlob = blob;
+        if (newImg.src) URL.revokeObjectURL(newImg.src);
+        newImg.src = URL.createObjectURL(blob);
+        newDim.textContent = w + ' × ' + h;
+      }, mimeType, 0.92);
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      if (!resizedBlob) return;
+      const baseName = originalFile.name.replace(/\.[^.]+$/, '');
+      const ext = mimeType === 'image/jpeg' ? 'jpg' :
+                  mimeType === 'image/webp' ? 'webp' : 'png';
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(resizedBlob);
+      a.download = baseName + '-' + widthIn.value + 'x' + heightIn.value + '.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    resetBtn.addEventListener('click', () => {
+      originalFile = null;
+      originalImage = null;
+      resizedBlob = null;
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      clearActivePreset();
+      if (origImg.src) URL.revokeObjectURL(origImg.src);
+      if (newImg.src) URL.revokeObjectURL(newImg.src);
+      origImg.removeAttribute('src');
+      newImg.removeAttribute('src');
+      clearError();
+    });
+  </script>
+</body>
+</html>

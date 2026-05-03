@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Images to PDF — BkkBoost Tools</title>
+  <meta name="description" content="Combine images into a single PDF. Drag to reorder, choose page size and margins.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <style>
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 600px) { .settings-grid { grid-template-columns: 1fr; } }
+    .slider-row { display: flex; align-items: center; gap: 12px; }
+    .slider-row input[type="range"] { flex: 1; }
+    .slider-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      min-width: 50px;
+      text-align: right;
+    }
+
+    .img-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .img-card {
+      position: relative;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: grab;
+      transition: opacity 0.15s, border-color 0.15s;
+    }
+    .img-card:active { cursor: grabbing; }
+    .img-card.dragging { opacity: 0.4; }
+    .img-card:hover { border-color: var(--border2); }
+    .img-card-thumb {
+      width: 100%;
+      aspect-ratio: 1;
+      background: #14141a;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .img-card-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .img-card-name {
+      font-size: 11px;
+      color: var(--text2);
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: center;
+    }
+    .img-card-pos {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      background: rgba(0,0,0,0.75);
+      color: white;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .img-card-rm {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(13,13,18,0.85);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .img-card-rm:hover { color: #FCA5A5; border-color: #FCA5A5; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
+    .total-info {
+      text-align: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Images to PDF</h1>
+      <p class="tool-desc">Combine PNG, JPEG, or WebP images into a single PDF. Drag to reorder.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">📄</div>
+      <div class="dropzone-title">Drop images or click to browse</div>
+      <div class="dropzone-subtitle">PNG, JPEG, WebP — drag tiles to reorder</div>
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" multiple hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Page settings</div>
+        <div class="settings-grid">
+          <div>
+            <label for="pageSize">Page size</label>
+            <select id="pageSize">
+              <option value="A4">A4 (210 × 297 mm)</option>
+              <option value="Letter">US Letter (8.5 × 11 in)</option>
+              <option value="Legal">US Legal (8.5 × 14 in)</option>
+              <option value="A3">A3 (297 × 420 mm)</option>
+              <option value="A5">A5 (148 × 210 mm)</option>
+              <option value="fit">Fit to image</option>
+            </select>
+          </div>
+          <div>
+            <label for="orient">Orientation</label>
+            <select id="orient">
+              <option value="auto">Auto (match image)</option>
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Landscape</option>
+            </select>
+          </div>
+          <div style="grid-column: 1 / -1;">
+            <label for="margin">Margin (pt)</label>
+            <div class="slider-row">
+              <input type="range" id="margin" min="0" max="100" value="20">
+              <div class="slider-val" id="marginVal">20</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Images (drag to reorder)</div>
+        <div class="img-grid" id="imgGrid"></div>
+        <div class="total-info" id="totalInfo">—</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="createBtn">⬇ Create PDF & Download</button>
+        <button class="btn-secondary" id="addMoreBtn">+ Add more</button>
+        <button class="btn-secondary" id="clearBtn">🗑 Clear all</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const { PDFDocument } = PDFLib;
+
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const imgGrid = document.getElementById('imgGrid');
+    const totalInfo = document.getElementById('totalInfo');
+    const pageSizeSel = document.getElementById('pageSize');
+    const orientSel = document.getElementById('orient');
+    const marginRange = document.getElementById('margin');
+    const marginVal = document.getElementById('marginVal');
+    const createBtn = document.getElementById('createBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const addMoreBtn = document.getElementById('addMoreBtn');
+
+    // Page sizes in points (1 in = 72 pt)
+    const PAGE_SIZES = {
+      A4: [595.28, 841.89],
+      Letter: [612, 792],
+      Legal: [612, 1008],
+      A3: [841.89, 1190.55],
+      A5: [419.53, 595.28],
+    };
+
+    let images = [];
+    let nextId = 1;
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+      return (b/1024/1024).toFixed(2) + ' MB';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    marginRange.addEventListener('input', () => { marginVal.textContent = marginRange.value; });
+
+    dz.addEventListener('click', () => fileInput.click());
+    addMoreBtn.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', e => { handleFiles(e.target.files); fileInput.value = ''; });
+
+    async function handleFiles(fileListLike) {
+      clearError();
+      const arr = Array.from(fileListLike).filter(f => f.type.startsWith('image/'));
+      if (!arr.length) {
+        showError('Please choose image files (PNG, JPEG, or WebP).');
+        return;
+      }
+      const errors = [];
+      for (const f of arr) {
+        try {
+          const url = URL.createObjectURL(f);
+          const dims = await new Promise((res, rej) => {
+            const img = new Image();
+            img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight });
+            img.onerror = rej;
+            img.src = url;
+          });
+          images.push({
+            id: nextId++,
+            file: f,
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            url,
+            w: dims.w,
+            h: dims.h
+          });
+        } catch (err) {
+          errors.push(f.name);
+        }
+      }
+      if (errors.length) showError(`Could not load: ${errors.join(', ')}`);
+      render();
+    }
+
+    function render() {
+      if (!images.length) {
+        workspace.classList.add('hidden');
+        return;
+      }
+      workspace.classList.remove('hidden');
+      imgGrid.innerHTML = '';
+      let totalSize = 0;
+      images.forEach((img, idx) => {
+        totalSize += img.size;
+        const card = document.createElement('div');
+        card.className = 'img-card';
+        card.draggable = true;
+        card.dataset.id = img.id;
+        card.innerHTML = `
+          <span class="img-card-pos">${idx + 1}</span>
+          <button class="img-card-rm" title="Remove">✕</button>
+          <div class="img-card-thumb"><img alt=""></div>
+          <div class="img-card-name"></div>
+        `;
+        card.querySelector('.img-card-thumb img').src = img.url;
+        card.querySelector('.img-card-name').textContent = img.name;
+        card.querySelector('.img-card-rm').addEventListener('click', e => {
+          e.stopPropagation();
+          URL.revokeObjectURL(img.url);
+          images = images.filter(x => x.id !== img.id);
+          render();
+        });
+        imgGrid.appendChild(card);
+      });
+      totalInfo.textContent = `${images.length} ${images.length === 1 ? 'image' : 'images'} · ${fmtSize(totalSize)} total`;
+      createBtn.disabled = images.length === 0;
+    }
+
+    let dragged = null;
+    imgGrid.addEventListener('dragstart', e => {
+      const card = e.target.closest('.img-card');
+      if (!card) return;
+      dragged = card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    imgGrid.addEventListener('dragend', () => {
+      if (dragged) dragged.classList.remove('dragging');
+      dragged = null;
+    });
+    imgGrid.addEventListener('dragover', e => {
+      e.preventDefault();
+      const target = e.target.closest('.img-card');
+      if (!target || !dragged || target === dragged) return;
+      const rect = target.getBoundingClientRect();
+      const before = (e.clientX - rect.left) < rect.width / 2;
+      target.parentNode.insertBefore(dragged, before ? target : target.nextSibling);
+    });
+    imgGrid.addEventListener('drop', e => {
+      e.preventDefault();
+      const order = [...imgGrid.querySelectorAll('.img-card')].map(el => +el.dataset.id);
+      images.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      render();
+    });
+
+    async function imageToPdfBytes(img) {
+      // Returns { kind: 'png'|'jpg', bytes: Uint8Array }
+      if (img.type === 'image/jpeg') {
+        return { kind: 'jpg', bytes: new Uint8Array(await img.file.arrayBuffer()) };
+      }
+      if (img.type === 'image/png') {
+        return { kind: 'png', bytes: new Uint8Array(await img.file.arrayBuffer()) };
+      }
+      // WebP or anything else: convert via canvas to PNG
+      const canvas = document.createElement('canvas');
+      canvas.width = img.w;
+      canvas.height = img.h;
+      const ctx = canvas.getContext('2d');
+      const bitmap = await createImageBitmap(img.file);
+      ctx.drawImage(bitmap, 0, 0);
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+      return { kind: 'png', bytes: new Uint8Array(await blob.arrayBuffer()) };
+    }
+
+    createBtn.addEventListener('click', async () => {
+      if (!images.length) return;
+      createBtn.disabled = true;
+      const orig = createBtn.innerHTML;
+      createBtn.innerHTML = '<span class="spinner"></span> Building PDF...';
+      clearError();
+      try {
+        const pdf = await PDFDocument.create();
+        const margin = +marginRange.value;
+        const pageSizeKey = pageSizeSel.value;
+        const orient = orientSel.value;
+
+        for (let i = 0; i < images.length; i++) {
+          createBtn.innerHTML = `<span class="spinner"></span> Adding image ${i + 1} / ${images.length}...`;
+          const img = images[i];
+          const { kind, bytes } = await imageToPdfBytes(img);
+          const embedded = kind === 'jpg' ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
+
+          let pageW, pageH;
+          if (pageSizeKey === 'fit') {
+            // Page = image size + margins (treat image px as points)
+            pageW = embedded.width + margin * 2;
+            pageH = embedded.height + margin * 2;
+          } else {
+            const [pw, ph] = PAGE_SIZES[pageSizeKey];
+            let useLandscape;
+            if (orient === 'portrait') useLandscape = false;
+            else if (orient === 'landscape') useLandscape = true;
+            else useLandscape = embedded.width > embedded.height;
+            pageW = useLandscape ? Math.max(pw, ph) : Math.min(pw, ph);
+            pageH = useLandscape ? Math.min(pw, ph) : Math.max(pw, ph);
+          }
+
+          const page = pdf.addPage([pageW, pageH]);
+          const availW = pageW - margin * 2;
+          const availH = pageH - margin * 2;
+          const scale = Math.min(availW / embedded.width, availH / embedded.height, 1);
+          const drawW = embedded.width * scale;
+          const drawH = embedded.height * scale;
+          const x = (pageW - drawW) / 2;
+          const y = (pageH - drawH) / 2;
+          page.drawImage(embedded, { x, y, width: drawW, height: drawH });
+        }
+
+        const out = await pdf.save();
+        const blob = new Blob([out], { type: 'application/pdf' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'images.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      } catch (err) {
+        showError('Failed to build PDF. ' + (err.message || ''));
+      } finally {
+        createBtn.innerHTML = orig;
+        createBtn.disabled = false;
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      images.forEach(img => URL.revokeObjectURL(img.url));
+      images = [];
+      render();
+      clearError();
+    });
+  </script>
+</body>
+</html>

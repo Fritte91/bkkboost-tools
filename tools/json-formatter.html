@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Formatter — BkkBoost Tools</title>
+  <meta name="description" content="Format, minify, and validate JSON with syntax highlighting and exact error positions.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+    .stats {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 8px;
+    }
+    .stats span strong { color: var(--text2); font-weight: 500; }
+    pre.output {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      overflow: auto;
+      max-height: 460px;
+      white-space: pre;
+      color: var(--text);
+      margin: 0;
+    }
+    .jk { color: #93C5FD; }
+    .js { color: #86EFAC; }
+    .jn { color: #F59E0B; }
+    .jb { color: #C4B5FD; font-weight: 500; }
+    .jl { color: var(--text3); font-style: italic; }
+    .copy-row { display: flex; justify-content: flex-end; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>JSON Formatter</h1>
+      <p class="tool-desc">Format, minify, and validate JSON with syntax highlighting and exact error positions.</p>
+    </div>
+
+    <div class="panel">
+      <label for="input">Input</label>
+      <textarea id="input" placeholder='{"hello":"world","items":[1,2,3]}' style="min-height: 200px;"></textarea>
+      <div class="actions">
+        <button class="btn-primary" id="formatBtn">{ } Format</button>
+        <button class="btn-secondary" id="minifyBtn">⇉ Minify</button>
+        <button class="btn-secondary" id="validateBtn">✓ Validate</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+      <div id="errorBar" class="error-bar hidden"></div>
+      <div id="successBar" class="success-bar hidden"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Output</div>
+      <pre class="output" id="output"></pre>
+      <div class="stats">
+        <span><strong>Lines:</strong> <span id="lineCount">0</span></span>
+        <span><strong>Size:</strong> <span id="byteSize">0 B</span></span>
+      </div>
+      <div class="copy-row">
+        <button class="btn-secondary" id="copyBtn">📋 Copy</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const input = document.getElementById('input');
+    const output = document.getElementById('output');
+    const errorBar = document.getElementById('errorBar');
+    const successBar = document.getElementById('successBar');
+    const lineCount = document.getElementById('lineCount');
+    const byteSize = document.getElementById('byteSize');
+    const copyBtn = document.getElementById('copyBtn');
+
+    let rawOutput = '';
+
+    function fmtBytes(n) {
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); successBar.classList.add('hidden'); }
+    function showSuccess(msg) { successBar.textContent = msg; successBar.classList.remove('hidden'); errorBar.classList.add('hidden'); }
+    function clearStatus() { errorBar.classList.add('hidden'); successBar.classList.add('hidden'); }
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
+    }
+
+    function highlight(json) {
+      // Tokenize via regex over the formatted JSON text. Strings first, then numbers/bools/null.
+      const escaped = escapeHtml(json);
+      return escaped.replace(
+        /("(?:[^"\\]|\\.)*")(\s*:)?|\b(true|false)\b|\bnull\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g,
+        (match, str, colon, bool) => {
+          if (str !== undefined) {
+            if (colon) return '<span class="jk">' + str + '</span>' + colon;
+            return '<span class="js">' + str + '</span>';
+          }
+          if (bool !== undefined) return '<span class="jb">' + bool + '</span>';
+          if (match === 'null') return '<span class="jl">null</span>';
+          return '<span class="jn">' + match + '</span>';
+        }
+      );
+    }
+
+    function setOutput(text) {
+      rawOutput = text;
+      output.innerHTML = highlight(text);
+      lineCount.textContent = text ? text.split('\n').length : 0;
+      byteSize.textContent = fmtBytes(new Blob([text]).size);
+    }
+
+    // Augment JSON.parse errors with line/column info derived from the position.
+    function parseWithLocation(src) {
+      try {
+        return { ok: true, value: JSON.parse(src) };
+      } catch (e) {
+        const msg = e.message || String(e);
+        const posMatch = msg.match(/position (\d+)/i);
+        let loc = '';
+        if (posMatch) {
+          const pos = +posMatch[1];
+          const upto = src.slice(0, pos);
+          const line = (upto.match(/\n/g) || []).length + 1;
+          const col = pos - upto.lastIndexOf('\n');
+          loc = ' (line ' + line + ', col ' + col + ')';
+        }
+        return { ok: false, error: msg + loc };
+      }
+    }
+
+    function format() {
+      clearStatus();
+      const src = input.value.trim();
+      if (!src) { setOutput(''); return; }
+      const r = parseWithLocation(src);
+      if (!r.ok) { showError(r.error); setOutput(''); return; }
+      setOutput(JSON.stringify(r.value, null, 2));
+      showSuccess('Formatted.');
+    }
+    function minify() {
+      clearStatus();
+      const src = input.value.trim();
+      if (!src) { setOutput(''); return; }
+      const r = parseWithLocation(src);
+      if (!r.ok) { showError(r.error); setOutput(''); return; }
+      setOutput(JSON.stringify(r.value));
+      showSuccess('Minified.');
+    }
+    function validate() {
+      clearStatus();
+      const src = input.value.trim();
+      if (!src) { showError('Nothing to validate.'); return; }
+      const r = parseWithLocation(src);
+      if (!r.ok) { showError(r.error); return; }
+      const type = Array.isArray(r.value) ? 'array' : typeof r.value;
+      showSuccess('Valid JSON (' + type + ').');
+    }
+
+    document.getElementById('formatBtn').addEventListener('click', format);
+    document.getElementById('minifyBtn').addEventListener('click', minify);
+    document.getElementById('validateBtn').addEventListener('click', validate);
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      input.value = ''; setOutput(''); clearStatus();
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      if (!rawOutput) return;
+      try {
+        await navigator.clipboard.writeText(rawOutput);
+        const o = copyBtn.textContent;
+        copyBtn.textContent = '✓ Copied';
+        setTimeout(() => copyBtn.textContent = o, 1500);
+      } catch (e) { showError('Copy failed.'); }
+    });
+
+    // Auto-format on paste of large input for convenience
+    input.addEventListener('paste', () => setTimeout(() => {
+      if (input.value.trim() && !rawOutput) format();
+    }, 0));
+  </script>
+</body>
+</html>

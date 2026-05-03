@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel to CSV — BkkBoost Tools</title>
+  <meta name="description" content="Convert .xlsx and .xls files to CSV. Multi-sheet support with one-click ZIP export. Runs entirely in your browser.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    .sheet-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .sheet-tab {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      padding: 7px 14px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sheet-tab:hover { color: var(--text); border-color: var(--border2); }
+    .sheet-tab.active {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: white;
+    }
+    .stats-row {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 12px;
+    }
+    .stats-row strong { color: var(--text); font-weight: 500; }
+    .table-wrap {
+      overflow: auto;
+      max-height: 480px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+    table.preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      font-family: 'DM Mono', monospace;
+    }
+    table.preview-table th, table.preview-table td {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      min-width: 80px;
+      white-space: nowrap;
+    }
+    table.preview-table th {
+      background: var(--surface2);
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    table.preview-table tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Excel to CSV</h1>
+      <p class="tool-desc">Convert .xlsx or .xls workbooks to CSV. Browse sheets, preview, and export one or all at once.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">📗</div>
+      <div class="dropzone-title">Drop a .xlsx or .xls file or click to browse</div>
+      <div class="dropzone-subtitle">Multi-sheet workbooks supported</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+    <div id="loadingBar" class="info-bar hidden">Reading workbook…</div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Sheets</div>
+        <div class="sheet-tabs" id="sheetTabs"></div>
+        <div class="stats-row">
+          <span><strong id="rowCount">0</strong> rows</span>
+          <span><strong id="colCount">0</strong> columns</span>
+          <span>File: <strong id="fileName">—</strong></span>
+        </div>
+        <div class="table-wrap" id="tableWrap"></div>
+        <div class="actions">
+          <button class="btn-primary" id="downloadCsvBtn">⬇ Download CSV (this sheet)</button>
+          <button class="btn-secondary" id="downloadAllBtn">📦 Download All Sheets (ZIP)</button>
+          <button class="btn-ghost" id="resetBtn">Load different file</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const loadingBar = document.getElementById('loadingBar');
+    const workspace = document.getElementById('workspace');
+    const sheetTabs = document.getElementById('sheetTabs');
+    const tableWrap = document.getElementById('tableWrap');
+    const rowCountEl = document.getElementById('rowCount');
+    const colCountEl = document.getElementById('colCount');
+    const fileNameEl = document.getElementById('fileName');
+
+    let workbook = null;
+    let activeSheet = '';
+    let currentFileName = '';
+    const PREVIEW_LIMIT = 200;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError();
+      loadingBar.classList.remove('hidden');
+      currentFileName = file.name;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = new Uint8Array(reader.result);
+          workbook = XLSX.read(data, { type: 'array' });
+          if (!workbook.SheetNames.length) {
+            showError('Workbook has no sheets.');
+            loadingBar.classList.add('hidden');
+            return;
+          }
+          fileNameEl.textContent = currentFileName;
+          activeSheet = workbook.SheetNames[0];
+          renderSheetTabs();
+          renderActiveSheet();
+          workspace.classList.remove('hidden');
+          loadingBar.classList.add('hidden');
+        } catch (e) {
+          loadingBar.classList.add('hidden');
+          showError('Could not read workbook: ' + (e.message || e));
+        }
+      };
+      reader.onerror = () => { loadingBar.classList.add('hidden'); showError('Could not read file.'); };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function renderSheetTabs() {
+      sheetTabs.innerHTML = '';
+      workbook.SheetNames.forEach(name => {
+        const btn = document.createElement('button');
+        btn.className = 'sheet-tab' + (name === activeSheet ? ' active' : '');
+        btn.textContent = name;
+        btn.title = name;
+        btn.addEventListener('click', () => {
+          activeSheet = name;
+          renderSheetTabs();
+          renderActiveSheet();
+        });
+        sheetTabs.appendChild(btn);
+      });
+    }
+
+    function sheetToGrid(sheet) {
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+    }
+
+    function renderActiveSheet() {
+      const sheet = workbook.Sheets[activeSheet];
+      const grid = sheetToGrid(sheet);
+      const totalRows = grid.length;
+      const totalCols = grid.reduce((m, r) => Math.max(m, r.length), 0);
+      rowCountEl.textContent = totalRows;
+      colCountEl.textContent = totalCols;
+
+      const previewRows = grid.slice(0, PREVIEW_LIMIT);
+      const table = document.createElement('table');
+      table.className = 'preview-table';
+      const thead = document.createElement('thead');
+      const trH = document.createElement('tr');
+      for (let c = 0; c < totalCols; c++) {
+        const th = document.createElement('th');
+        // Use first row as header labels if non-empty, otherwise A,B,C
+        const first = previewRows[0] && previewRows[0][c];
+        th.textContent = (first !== undefined && first !== '') ? String(first) : colLabel(c);
+        trH.appendChild(th);
+      }
+      thead.appendChild(trH);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      // If first row was used as header, start from row 1
+      const startRow = previewRows[0] && previewRows[0].some(v => v !== '' && v !== undefined) ? 1 : 0;
+      for (let i = startRow; i < previewRows.length; i++) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < totalCols; c++) {
+          const td = document.createElement('td');
+          const v = previewRows[i][c];
+          td.textContent = v == null ? '' : String(v);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      tableWrap.innerHTML = '';
+      tableWrap.appendChild(table);
+
+      if (totalRows > PREVIEW_LIMIT) {
+        const note = document.createElement('div');
+        note.style.cssText = 'padding: 10px; font-size: 12px; color: var(--text3); text-align: center; border-top: 1px solid var(--border);';
+        note.textContent = 'Showing first ' + PREVIEW_LIMIT + ' rows · download CSV for full data';
+        tableWrap.appendChild(note);
+      }
+    }
+
+    function colLabel(n) {
+      let s = '';
+      n = n + 1;
+      while (n > 0) {
+        const r = (n - 1) % 26;
+        s = String.fromCharCode(65 + r) + s;
+        n = Math.floor((n - 1) / 26);
+      }
+      return s;
+    }
+
+    function csvForSheet(name) {
+      return XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
+    }
+
+    function safeFileName(name) {
+      return name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || 'sheet';
+    }
+
+    document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+      if (!workbook) return;
+      const csv = csvForSheet(activeSheet);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const base = currentFileName.replace(/\.[^.]+$/, '');
+      a.download = base + '-' + safeFileName(activeSheet) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    document.getElementById('downloadAllBtn').addEventListener('click', async () => {
+      if (!workbook) return;
+      try {
+        const zip = new JSZip();
+        for (const name of workbook.SheetNames) {
+          zip.file(safeFileName(name) + '.csv', csvForSheet(name));
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const base = currentFileName.replace(/\.[^.]+$/, '');
+        a.download = base + '-csv.zip';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      } catch (e) {
+        showError('Could not build ZIP: ' + (e.message || e));
+      }
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      workbook = null;
+      activeSheet = '';
+      currentFileName = '';
+      sheetTabs.innerHTML = '';
+      tableWrap.innerHTML = '';
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      clearError();
+    });
+  </script>
+</body>
+</html>

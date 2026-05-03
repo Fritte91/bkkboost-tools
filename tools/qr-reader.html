@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Reader — BkkBoost Tools</title>
+  <meta name="description" content="Decode QR codes from an uploaded image or your camera. Runs entirely in your browser.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    .mode-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .mode-tab {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-tab:hover { color: var(--text); border-color: var(--border2); }
+    .mode-tab.active {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: white;
+    }
+    .mode-panel { display: none; }
+    .mode-panel.active { display: block; }
+    .preview-img {
+      max-width: 100%;
+      max-height: 320px;
+      margin: 12px auto 0;
+      display: block;
+      border-radius: var(--radius-sm);
+    }
+    .video-stage {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 1 / 1;
+    }
+    .video-stage video, .video-stage canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .video-stage canvas { position: absolute; inset: 0; pointer-events: none; }
+    .scan-overlay {
+      position: absolute;
+      inset: 12%;
+      border: 2px solid rgba(255,255,255,0.6);
+      border-radius: var(--radius);
+      pointer-events: none;
+    }
+    .camera-controls {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-top: 12px; justify-content: center;
+    }
+    .result-output {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text);
+      word-break: break-all;
+      white-space: pre-wrap;
+      min-height: 60px;
+      max-height: 280px;
+      overflow: auto;
+    }
+    .result-link {
+      display: inline-block;
+      margin-top: 10px;
+      color: var(--orange);
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .result-link:hover { color: var(--orange-light); text-decoration: underline; }
+    .result-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>QR Code Reader</h1>
+      <p class="tool-desc">Decode QR codes from an uploaded image or your camera. Nothing leaves your device.</p>
+    </div>
+
+    <div class="panel">
+      <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="upload">📷 Upload Image</button>
+        <button class="mode-tab" data-mode="camera">🎥 Live Camera</button>
+      </div>
+
+      <div class="mode-panel active" data-panel="upload">
+        <div class="dropzone" id="dz">
+          <div class="dropzone-icon">📥</div>
+          <div class="dropzone-title">Drop an image or click to browse</div>
+          <div class="dropzone-subtitle">PNG, JPEG, WebP, GIF</div>
+          <input type="file" id="fileInput" accept="image/*" hidden>
+        </div>
+        <img id="previewImg" class="preview-img hidden" alt="Uploaded">
+      </div>
+
+      <div class="mode-panel" data-panel="camera">
+        <div class="video-stage" id="videoStage">
+          <video id="cameraVideo" playsinline muted></video>
+          <canvas id="overlayCanvas"></canvas>
+          <div class="scan-overlay"></div>
+        </div>
+        <div class="camera-controls">
+          <button class="btn-primary" id="startCameraBtn">Start camera</button>
+          <button class="btn-secondary hidden" id="stopCameraBtn">Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div class="panel" id="resultPanel">
+      <div class="panel-title">Decoded content</div>
+      <div class="result-output" id="resultOutput">No QR code detected yet.</div>
+      <div id="resultLinkWrap"></div>
+      <div class="result-actions">
+        <button class="btn-secondary" id="copyBtn">📋 Copy</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const modeTabs = document.querySelectorAll('.mode-tab');
+    const modePanels = document.querySelectorAll('.mode-panel');
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const previewImg = document.getElementById('previewImg');
+    const errorBar = document.getElementById('errorBar');
+    const resultOutput = document.getElementById('resultOutput');
+    const resultLinkWrap = document.getElementById('resultLinkWrap');
+    const copyBtn = document.getElementById('copyBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const overlayCanvas = document.getElementById('overlayCanvas');
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const stopCameraBtn = document.getElementById('stopCameraBtn');
+
+    let currentResult = '';
+    let cameraStream = null;
+    let scanInterval = null;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    function setResult(text) {
+      currentResult = text || '';
+      resultOutput.textContent = text || 'No QR code detected yet.';
+      resultLinkWrap.innerHTML = '';
+      if (text && /^https?:\/\//i.test(text.trim())) {
+        const a = document.createElement('a');
+        a.href = text.trim();
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'result-link';
+        a.textContent = '↗ Open ' + text.trim();
+        resultLinkWrap.appendChild(a);
+      }
+    }
+
+    // Mode switching
+    modeTabs.forEach(t => t.addEventListener('click', () => {
+      modeTabs.forEach(x => x.classList.remove('active'));
+      modePanels.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      const mode = t.dataset.mode;
+      document.querySelector('[data-panel="' + mode + '"]').classList.add('active');
+      if (mode !== 'camera') stopCamera();
+    }));
+
+    // Drop zone
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) decodeFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) decodeFile(e.target.files[0]); });
+
+    function decodeFile(file) {
+      clearError();
+      if (!file.type.startsWith('image/')) {
+        showError('Please choose an image file.');
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        previewImg.src = url;
+        previewImg.classList.remove('hidden');
+        decodeImage(img);
+      };
+      img.onerror = () => { showError('Could not decode this image.'); URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    function decodeImage(img) {
+      const canvas = document.createElement('canvas');
+      const max = 1600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > max || h > max) {
+        const s = max / Math.max(w, h);
+        w = Math.round(w * s); h = Math.round(h * s);
+      }
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const code = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
+      if (code && code.data) {
+        setResult(code.data);
+      } else {
+        setResult('');
+        showError('No QR code found in this image.');
+      }
+    }
+
+    // Camera
+    startCameraBtn.addEventListener('click', startCamera);
+    stopCameraBtn.addEventListener('click', stopCamera);
+
+    async function startCamera() {
+      clearError();
+      try {
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }, audio: false
+        });
+        cameraVideo.srcObject = cameraStream;
+        await cameraVideo.play();
+        startCameraBtn.classList.add('hidden');
+        stopCameraBtn.classList.remove('hidden');
+        scanInterval = setInterval(scanFromVideo, 200);
+      } catch (e) {
+        showError('Could not access camera: ' + (e.message || e));
+      }
+    }
+
+    function stopCamera() {
+      if (scanInterval) { clearInterval(scanInterval); scanInterval = null; }
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(t => t.stop());
+        cameraStream = null;
+      }
+      cameraVideo.srcObject = null;
+      startCameraBtn.classList.remove('hidden');
+      stopCameraBtn.classList.add('hidden');
+      const ctx = overlayCanvas.getContext('2d');
+      ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    }
+
+    function scanFromVideo() {
+      if (!cameraVideo.videoWidth) return;
+      const w = cameraVideo.videoWidth;
+      const h = cameraVideo.videoHeight;
+      const tmp = document.createElement('canvas');
+      tmp.width = w; tmp.height = h;
+      const tctx = tmp.getContext('2d');
+      tctx.drawImage(cameraVideo, 0, 0, w, h);
+      const imageData = tctx.getImageData(0, 0, w, h);
+      const code = jsQR(imageData.data, w, h, { inversionAttempts: 'dontInvert' });
+      overlayCanvas.width = w;
+      overlayCanvas.height = h;
+      const octx = overlayCanvas.getContext('2d');
+      octx.clearRect(0, 0, w, h);
+      if (code && code.data) {
+        // Draw box around detected code
+        const loc = code.location;
+        octx.strokeStyle = '#22C55E';
+        octx.lineWidth = Math.max(3, w * 0.005);
+        octx.beginPath();
+        octx.moveTo(loc.topLeftCorner.x, loc.topLeftCorner.y);
+        octx.lineTo(loc.topRightCorner.x, loc.topRightCorner.y);
+        octx.lineTo(loc.bottomRightCorner.x, loc.bottomRightCorner.y);
+        octx.lineTo(loc.bottomLeftCorner.x, loc.bottomLeftCorner.y);
+        octx.closePath();
+        octx.stroke();
+        setResult(code.data);
+      }
+    }
+
+    copyBtn.addEventListener('click', async () => {
+      if (!currentResult) return;
+      try {
+        await navigator.clipboard.writeText(currentResult);
+        const o = copyBtn.textContent;
+        copyBtn.textContent = '✓ Copied';
+        setTimeout(() => copyBtn.textContent = o, 1500);
+      } catch (e) { showError('Copy failed.'); }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      setResult('');
+      previewImg.classList.add('hidden');
+      previewImg.removeAttribute('src');
+      fileInput.value = '';
+      clearError();
+    });
+
+    window.addEventListener('beforeunload', stopCamera);
+  </script>
+</body>
+</html>

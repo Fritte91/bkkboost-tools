@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contrast Checker — BkkBoost Tools</title>
+  <meta name="description" content="Check WCAG color contrast ratios for accessibility. Test foreground and background colors against AA and AAA standards.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .color-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 600px) { .color-grid { grid-template-columns: 1fr; } }
+
+    .color-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+    }
+    .color-card-header {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text3);
+      margin-bottom: 10px;
+      font-weight: 500;
+    }
+    .color-pick-row {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .color-pick-row input[type=color] {
+      width: 56px;
+      height: 44px;
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      padding: 0;
+      background: transparent;
+    }
+    .color-pick-row input[type=text] {
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+    .color-pick-row input[type=text].invalid {
+      border-color: var(--red);
+    }
+
+    .actions-row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .preview-area {
+      border-radius: var(--radius);
+      padding: 36px 28px;
+      border: 1px solid var(--border2);
+      transition: background 0.15s, color 0.15s;
+    }
+    .preview-area .ptxt-large {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+    .preview-area .ptxt-bold {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .preview-area .ptxt-normal {
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .ratio-display {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 10px;
+      padding: 18px 12px;
+    }
+    .ratio-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 48px;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .ratio-suffix {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      color: var(--text3);
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 600px) { .results-grid { grid-template-columns: 1fr; } }
+
+    .result-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+    }
+    .result-info { flex: 1; min-width: 0; }
+    .result-name { font-size: 13px; font-weight: 500; color: var(--text); }
+    .result-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+    .verdict {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-family: 'DM Mono', monospace;
+    }
+    .verdict.pass {
+      background: rgba(34,197,94,0.14);
+      color: #86EFAC;
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+    .verdict.fail {
+      background: rgba(239,68,68,0.14);
+      color: #FCA5A5;
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Contrast Checker</h1>
+      <p class="tool-desc">Check color contrast against WCAG AA and AAA accessibility standards.</p>
+    </div>
+
+    <div class="panel">
+      <div class="color-grid">
+        <div class="color-card">
+          <div class="color-card-header">Foreground (text)</div>
+          <div class="color-pick-row">
+            <input type="color" id="fgPicker" value="#1B2A4A">
+            <input type="text" id="fgHex" value="#1B2A4A" spellcheck="false" maxlength="7">
+          </div>
+        </div>
+        <div class="color-card">
+          <div class="color-card-header">Background</div>
+          <div class="color-pick-row">
+            <input type="color" id="bgPicker" value="#F0F0F0">
+            <input type="text" id="bgHex" value="#F0F0F0" spellcheck="false" maxlength="7">
+          </div>
+        </div>
+      </div>
+      <div class="actions-row">
+        <button class="btn-secondary" id="swapBtn">↔ Swap colors</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Preview</div>
+      <div class="preview-area" id="previewArea">
+        <div class="ptxt-large">Large heading text</div>
+        <div class="ptxt-bold">Bold call-to-action</div>
+        <div class="ptxt-normal">This is body text at 15 pixels. The five boxing wizards jump quickly to test how readable the body copy is at the chosen contrast level.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Contrast ratio</div>
+      <div class="ratio-display">
+        <div class="ratio-num" id="ratioNum">—</div>
+        <div class="ratio-suffix">: 1</div>
+      </div>
+      <div class="results-grid">
+        <div class="result-row">
+          <div class="result-info">
+            <div class="result-name">WCAG AA · Normal text</div>
+            <div class="result-meta">Requires 4.5 : 1</div>
+          </div>
+          <span class="verdict" id="rAaNormal">—</span>
+        </div>
+        <div class="result-row">
+          <div class="result-info">
+            <div class="result-name">WCAG AA · Large text</div>
+            <div class="result-meta">Requires 3 : 1</div>
+          </div>
+          <span class="verdict" id="rAaLarge">—</span>
+        </div>
+        <div class="result-row">
+          <div class="result-info">
+            <div class="result-name">WCAG AAA · Normal text</div>
+            <div class="result-meta">Requires 7 : 1</div>
+          </div>
+          <span class="verdict" id="rAaaNormal">—</span>
+        </div>
+        <div class="result-row">
+          <div class="result-info">
+            <div class="result-name">WCAG AAA · Large text</div>
+            <div class="result-meta">Requires 4.5 : 1</div>
+          </div>
+          <span class="verdict" id="rAaaLarge">—</span>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your data never leaves your device</footer>
+
+  <script>
+    const fgPicker = document.getElementById('fgPicker');
+    const bgPicker = document.getElementById('bgPicker');
+    const fgHex = document.getElementById('fgHex');
+    const bgHex = document.getElementById('bgHex');
+    const previewArea = document.getElementById('previewArea');
+    const ratioNum = document.getElementById('ratioNum');
+
+    function hexToRgb(hex) {
+      let h = hex.trim().replace(/^#/, '');
+      if (h.length === 3) h = h.split('').map(c => c + c).join('');
+      if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+      return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16) };
+    }
+
+    function relLuminance({ r, g, b }) {
+      const ch = c => {
+        c /= 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+    }
+
+    function contrastRatio(fg, bg) {
+      const L1 = relLuminance(fg), L2 = relLuminance(bg);
+      const hi = Math.max(L1, L2), lo = Math.min(L1, L2);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+
+    function setVerdict(id, pass) {
+      const el = document.getElementById(id);
+      el.textContent = pass ? '✓ Pass' : '✕ Fail';
+      el.className = 'verdict ' + (pass ? 'pass' : 'fail');
+    }
+
+    function update() {
+      const fg = hexToRgb(fgHex.value);
+      const bg = hexToRgb(bgHex.value);
+      fgHex.classList.toggle('invalid', !fg);
+      bgHex.classList.toggle('invalid', !bg);
+      if (!fg || !bg) {
+        ratioNum.textContent = '—';
+        ['rAaNormal','rAaLarge','rAaaNormal','rAaaLarge'].forEach(id => {
+          const el = document.getElementById(id);
+          el.textContent = '—';
+          el.className = 'verdict';
+        });
+        return;
+      }
+      const fgCss = '#' + [fg.r, fg.g, fg.b].map(v => v.toString(16).padStart(2,'0')).join('');
+      const bgCss = '#' + [bg.r, bg.g, bg.b].map(v => v.toString(16).padStart(2,'0')).join('');
+      previewArea.style.background = bgCss;
+      previewArea.style.color = fgCss;
+
+      const ratio = contrastRatio(fg, bg);
+      ratioNum.textContent = ratio.toFixed(2);
+
+      setVerdict('rAaNormal',  ratio >= 4.5);
+      setVerdict('rAaLarge',   ratio >= 3);
+      setVerdict('rAaaNormal', ratio >= 7);
+      setVerdict('rAaaLarge',  ratio >= 4.5);
+    }
+
+    function syncFromPicker(picker, hex) {
+      hex.value = picker.value.toUpperCase();
+      hex.classList.remove('invalid');
+      update();
+    }
+    function syncFromHex(picker, hex) {
+      let v = hex.value.trim();
+      if (v && !v.startsWith('#')) v = '#' + v;
+      const rgb = hexToRgb(v);
+      if (rgb) {
+        const norm = '#' + [rgb.r, rgb.g, rgb.b].map(c => c.toString(16).padStart(2,'0')).join('');
+        picker.value = norm;
+      }
+      update();
+    }
+
+    fgPicker.addEventListener('input', () => syncFromPicker(fgPicker, fgHex));
+    bgPicker.addEventListener('input', () => syncFromPicker(bgPicker, bgHex));
+    fgHex.addEventListener('input', () => syncFromHex(fgPicker, fgHex));
+    bgHex.addEventListener('input', () => syncFromHex(bgPicker, bgHex));
+
+    document.getElementById('swapBtn').addEventListener('click', () => {
+      const fv = fgHex.value, fp = fgPicker.value;
+      fgHex.value = bgHex.value; fgPicker.value = bgPicker.value;
+      bgHex.value = fv; bgPicker.value = fp;
+      update();
+    });
+
+    update();
+  </script>
+</body>
+</html>

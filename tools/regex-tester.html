@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Regex Tester — BkkBoost Tools</title>
+  <meta name="description" content="Test JavaScript regular expressions with live match highlighting and capture group inspection.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .pattern-shell {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 0;
+      align-items: stretch;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+    }
+    .pattern-shell.invalid { border-color: rgba(239,68,68,0.6); background: rgba(239,68,68,0.05); }
+    .pattern-shell .slash {
+      display: flex; align-items: center; padding: 0 12px;
+      font-family: 'DM Mono', monospace; font-size: 16px; color: var(--text3);
+    }
+    .pattern-shell input {
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      font-family: 'DM Mono', monospace;
+    }
+    .pattern-shell input:focus { background: transparent; }
+    .pattern-shell .flags-readout {
+      display: flex; align-items: center; padding: 0 12px;
+      font-family: 'DM Mono', monospace; font-size: 14px; color: var(--orange);
+      min-width: 60px;
+    }
+    .flags-row {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px;
+    }
+    .flag-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 5px 12px;
+      font-size: 12px;
+      color: var(--text2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .flag-chip input { width: auto; margin: 0; }
+    .flag-chip.on { background: rgba(232,83,26,0.12); border-color: var(--orange); color: var(--orange); }
+    .flag-chip code { font-family: 'DM Mono', monospace; }
+
+    .twin {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 720px) { .twin { grid-template-columns: 1fr; } }
+
+    .highlight-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      line-height: 1.55;
+      min-height: 220px;
+      max-height: 380px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+    }
+    .hl {
+      background: rgba(232,83,26,0.28);
+      color: #FFD9C7;
+      border-radius: 3px;
+      padding: 0 1px;
+    }
+    .hl.alt { background: rgba(245,158,11,0.30); color: #FCE2A6; }
+
+    .match-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+    .match-head {
+      display: flex; gap: 12px; align-items: baseline; margin-bottom: 4px;
+    }
+    .match-idx { color: var(--text3); }
+    .match-val { color: var(--orange); word-break: break-all; }
+    .group-row { color: var(--text2); padding-left: 16px; line-height: 1.6; }
+    .group-row .name { color: var(--text3); }
+
+    .stats { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Regex Tester</h1>
+      <p class="tool-desc">Test JavaScript regular expressions with live match highlighting and capture-group inspection.</p>
+    </div>
+
+    <div class="panel">
+      <label for="patternIn">Pattern</label>
+      <div class="pattern-shell" id="patternShell">
+        <div class="slash">/</div>
+        <input type="text" id="patternIn" placeholder="\b(\w+)@(\w+\.\w+)\b" spellcheck="false" autocomplete="off">
+        <div class="slash">/</div>
+        <div class="flags-readout" id="flagsReadout">g</div>
+      </div>
+      <div class="flags-row">
+        <label class="flag-chip on" data-flag="g"><input type="checkbox" id="fg" checked><code>g</code> global</label>
+        <label class="flag-chip" data-flag="i"><input type="checkbox" id="fi"><code>i</code> case-insensitive</label>
+        <label class="flag-chip" data-flag="m"><input type="checkbox" id="fm"><code>m</code> multiline</label>
+        <label class="flag-chip" data-flag="s"><input type="checkbox" id="fs"><code>s</code> dotall</label>
+      </div>
+      <div id="errorBar" class="error-bar hidden"></div>
+    </div>
+
+    <div class="panel">
+      <div class="stats" id="stats">No matches yet.</div>
+      <div class="twin">
+        <div>
+          <label for="testIn">Test string</label>
+          <textarea id="testIn" placeholder="Paste text to test against the pattern…" style="min-height: 220px;">Contact us at hello@example.com or sales@bkkboost.com.</textarea>
+        </div>
+        <div>
+          <label>Highlighted</label>
+          <div class="highlight-box" id="highlight"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Matches</div>
+      <div id="matches"></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const patternIn = document.getElementById('patternIn');
+    const patternShell = document.getElementById('patternShell');
+    const flagsReadout = document.getElementById('flagsReadout');
+    const flagChips = document.querySelectorAll('.flag-chip');
+    const fg = document.getElementById('fg');
+    const fi = document.getElementById('fi');
+    const fm = document.getElementById('fm');
+    const fs = document.getElementById('fs');
+    const errorBar = document.getElementById('errorBar');
+    const testIn = document.getElementById('testIn');
+    const highlight = document.getElementById('highlight');
+    const matches = document.getElementById('matches');
+    const stats = document.getElementById('stats');
+
+    patternIn.value = '\\b(\\w+)@(\\w+\\.\\w+)\\b';
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    }
+
+    function flagsString() {
+      return (fg.checked?'g':'') + (fi.checked?'i':'') + (fm.checked?'m':'') + (fs.checked?'s':'');
+    }
+
+    function syncChips() {
+      flagChips.forEach(chip => {
+        const cb = chip.querySelector('input');
+        chip.classList.toggle('on', cb.checked);
+      });
+      flagsReadout.textContent = flagsString() || '—';
+    }
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); patternShell.classList.add('invalid'); }
+    function clearError() { errorBar.classList.add('hidden'); patternShell.classList.remove('invalid'); }
+
+    function run() {
+      clearError();
+      const pat = patternIn.value;
+      if (!pat) {
+        highlight.innerHTML = escapeHtml(testIn.value);
+        matches.innerHTML = '';
+        stats.textContent = 'Enter a pattern to begin.';
+        return;
+      }
+      let re;
+      try {
+        re = new RegExp(pat, flagsString());
+      } catch (e) {
+        showError('Invalid pattern: ' + e.message);
+        highlight.innerHTML = escapeHtml(testIn.value);
+        matches.innerHTML = '';
+        stats.textContent = '—';
+        return;
+      }
+      const text = testIn.value;
+      const found = [];
+      if (re.global) {
+        for (const m of text.matchAll(re)) found.push(m);
+      } else {
+        const m = re.exec(text);
+        if (m) found.push(m);
+      }
+
+      // Build highlighted output
+      let html = '';
+      let cursor = 0;
+      found.forEach((m, i) => {
+        const start = m.index;
+        const end = start + m[0].length;
+        if (start > cursor) html += escapeHtml(text.slice(cursor, start));
+        const cls = 'hl' + (i % 2 ? ' alt' : '');
+        html += '<span class="' + cls + '">' + escapeHtml(m[0]) + '</span>';
+        cursor = end;
+        // Avoid infinite loop on zero-length matches
+        if (end === start) cursor++;
+      });
+      if (cursor < text.length) html += escapeHtml(text.slice(cursor));
+      highlight.innerHTML = html || '&nbsp;';
+
+      // Match list
+      matches.innerHTML = '';
+      if (!found.length) {
+        stats.textContent = 'No matches.';
+        return;
+      }
+      stats.textContent = found.length + ' match' + (found.length === 1 ? '' : 'es');
+      found.forEach((m, i) => {
+        const item = document.createElement('div');
+        item.className = 'match-item';
+        const head = document.createElement('div');
+        head.className = 'match-head';
+        const idx = document.createElement('span');
+        idx.className = 'match-idx';
+        idx.textContent = '#' + (i + 1) + ' @ ' + m.index;
+        const val = document.createElement('span');
+        val.className = 'match-val';
+        val.textContent = m[0];
+        head.appendChild(idx); head.appendChild(val);
+        item.appendChild(head);
+
+        for (let g = 1; g < m.length; g++) {
+          const row = document.createElement('div');
+          row.className = 'group-row';
+          const nm = document.createElement('span');
+          nm.className = 'name';
+          nm.textContent = '$' + g + ': ';
+          row.appendChild(nm);
+          row.appendChild(document.createTextNode(m[g] === undefined ? '(undefined)' : m[g]));
+          item.appendChild(row);
+        }
+        if (m.groups) {
+          for (const k of Object.keys(m.groups)) {
+            const row = document.createElement('div');
+            row.className = 'group-row';
+            const nm = document.createElement('span');
+            nm.className = 'name';
+            nm.textContent = k + ': ';
+            row.appendChild(nm);
+            row.appendChild(document.createTextNode(m.groups[k] === undefined ? '(undefined)' : m.groups[k]));
+            item.appendChild(row);
+          }
+        }
+        matches.appendChild(item);
+      });
+    }
+
+    [patternIn, testIn].forEach(el => el.addEventListener('input', run));
+    [fg, fi, fm, fs].forEach(el => el.addEventListener('change', () => { syncChips(); run(); }));
+    flagChips.forEach(chip => {
+      chip.addEventListener('click', e => {
+        if (e.target.tagName === 'INPUT') return;
+        const cb = chip.querySelector('input');
+        cb.checked = !cb.checked;
+        syncChips(); run();
+      });
+    });
+
+    syncChips();
+    run();
+  </script>
+</body>
+</html>

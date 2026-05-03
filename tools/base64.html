@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Base64 Encode/Decode — BkkBoost Tools</title>
+  <meta name="description" content="Encode and decode Base64 strings. Also supports converting any file to a Base64 data URI.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .twin {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+    .status { font-size: 12px; color: var(--text3); margin-top: 8px; min-height: 16px; text-align: center; }
+    .status.err { color: #FCA5A5; }
+    @media (max-width: 720px) { .twin { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Base64 Encode/Decode</h1>
+      <p class="tool-desc">Convert text to Base64 and back. Drop any file to encode it as a data URI.</p>
+    </div>
+
+    <div class="panel">
+      <div class="twin">
+        <div>
+          <label for="plain">Plain text</label>
+          <textarea id="plain" placeholder="Type or paste text…" style="min-height: 220px;"></textarea>
+        </div>
+        <div>
+          <label for="encoded">Base64</label>
+          <textarea id="encoded" placeholder="Type or paste Base64…" style="min-height: 220px;"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="encBtn">→ Encode</button>
+        <button class="btn-primary" id="decBtn">← Decode</button>
+        <button class="btn-secondary" id="copyPlainBtn">📋 Copy plain</button>
+        <button class="btn-secondary" id="copyEncBtn">📋 Copy Base64</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">File to Base64</div>
+      <div class="dropzone" id="dz">
+        <div class="dropzone-icon">📎</div>
+        <div class="dropzone-title">Drop a file or click to browse</div>
+        <div class="dropzone-subtitle">Outputs the file as a Base64 data URI</div>
+        <input type="file" id="fileInput" hidden>
+      </div>
+      <textarea id="fileOut" readonly placeholder="File data URI will appear here…" style="min-height: 140px; margin-top: 14px;"></textarea>
+      <div class="actions">
+        <button class="btn-secondary" id="copyFileBtn">📋 Copy data URI</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Files never leave your device</footer>
+  <script>
+    const plain = document.getElementById('plain');
+    const encoded = document.getElementById('encoded');
+    const status = document.getElementById('status');
+
+    function setStatus(msg, isErr) {
+      status.textContent = msg;
+      status.className = 'status' + (isErr ? ' err' : '');
+      if (msg) setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 2500);
+    }
+
+    let lock = false;
+
+    function encode() {
+      if (lock) return;
+      lock = true;
+      try {
+        const bytes = new TextEncoder().encode(plain.value);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        encoded.value = plain.value === '' ? '' : btoa(bin);
+      } catch (e) { setStatus('Encode failed: ' + e.message, true); }
+      finally { lock = false; }
+    }
+
+    function decode() {
+      if (lock) return;
+      lock = true;
+      try {
+        const v = encoded.value.replace(/\s+/g, '');
+        if (v === '') { plain.value = ''; return; }
+        const bin = atob(v);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        plain.value = new TextDecoder().decode(bytes);
+      } catch (e) { setStatus('Invalid Base64.', true); }
+      finally { lock = false; }
+    }
+
+    document.getElementById('encBtn').addEventListener('click', () => { encode(); setStatus('Encoded.'); });
+    document.getElementById('decBtn').addEventListener('click', () => { decode(); setStatus('Decoded.'); });
+
+    let typing = null;
+    plain.addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(encode, 200); });
+    encoded.addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(decode, 200); });
+
+    async function copy(val, msg) {
+      if (!val) return;
+      try { await navigator.clipboard.writeText(val); setStatus(msg); } catch (e) { setStatus('Copy failed.', true); }
+    }
+    document.getElementById('copyPlainBtn').addEventListener('click', () => copy(plain.value, 'Plain copied.'));
+    document.getElementById('copyEncBtn').addEventListener('click', () => copy(encoded.value, 'Base64 copied.'));
+    document.getElementById('clearBtn').addEventListener('click', () => { plain.value = ''; encoded.value = ''; });
+
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const fileOut = document.getElementById('fileOut');
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+    function handleFile(file) {
+      const r = new FileReader();
+      r.onload = () => { fileOut.value = r.result; setStatus('Encoded ' + file.name + '.'); };
+      r.onerror = () => setStatus('Could not read file.', true);
+      r.readAsDataURL(file);
+    }
+
+    document.getElementById('copyFileBtn').addEventListener('click', () => copy(fileOut.value, 'Data URI copied.'));
+  </script>
+</body>
+</html>

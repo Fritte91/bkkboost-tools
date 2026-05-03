@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON ↔ CSV — BkkBoost Tools</title>
+  <meta name="description" content="Convert between JSON arrays of objects and CSV files. Handles nested objects and quoted fields.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .mode-tabs {
+      display: inline-flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 4px;
+      gap: 2px;
+      margin-bottom: 14px;
+    }
+    .mode-tab {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .mode-tab:hover { color: var(--text); }
+    .mode-tab.active { background: var(--orange); color: white; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+    pre.output {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      overflow: auto;
+      max-height: 400px;
+      white-space: pre;
+      color: var(--text);
+      margin: 0;
+    }
+    .options-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: var(--text2);
+    }
+    .options-row label { display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer; }
+    .options-row input { width: auto; }
+    .stats {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 8px;
+    }
+    .file-row {
+      display: flex; gap: 10px; align-items: center; margin-bottom: 12px;
+      font-size: 12px; color: var(--text3);
+    }
+    .file-pick {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .file-pick:hover { border-color: var(--text3); }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>JSON ↔ CSV</h1>
+      <p class="tool-desc">Convert between JSON arrays of objects and CSV files. Nested values are JSON-stringified; quotes and commas are escaped per RFC 4180.</p>
+    </div>
+
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="j2c">JSON → CSV</button>
+      <button class="mode-tab" data-mode="c2j">CSV → JSON</button>
+    </div>
+
+    <div class="panel">
+      <div id="csvOptions" class="options-row hidden">
+        <label><input type="checkbox" id="coerceTypes" checked> Coerce numbers, booleans, null</label>
+      </div>
+      <div id="filePickRow" class="file-row hidden">
+        <button class="file-pick" id="filePickBtn">📎 Upload .csv</button>
+        <span id="fileName">No file chosen</span>
+        <input type="file" id="fileInput" accept=".csv,text/csv,text/plain" hidden>
+      </div>
+      <label for="input" id="inputLabel">JSON input</label>
+      <textarea id="input" placeholder='[{"name":"Anna","age":30},{"name":"Ben","age":25}]' style="min-height: 180px; font-family: DM Mono, monospace;"></textarea>
+      <div class="actions">
+        <button class="btn-primary" id="convertBtn">⇄ Convert</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+      <div id="errorBar" class="error-bar hidden"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title" id="outputTitle">CSV output</div>
+      <pre class="output" id="output"></pre>
+      <div class="stats" id="stats"></div>
+      <div class="actions" style="justify-content: flex-end; margin-bottom: 0;">
+        <button class="btn-secondary" id="copyBtn">📋 Copy</button>
+        <button class="btn-primary" id="downloadBtn">⬇ Download</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const tabs = document.querySelectorAll('.mode-tab');
+    const inputLabel = document.getElementById('inputLabel');
+    const outputTitle = document.getElementById('outputTitle');
+    const input = document.getElementById('input');
+    const output = document.getElementById('output');
+    const errorBar = document.getElementById('errorBar');
+    const stats = document.getElementById('stats');
+    const csvOptions = document.getElementById('csvOptions');
+    const coerceTypes = document.getElementById('coerceTypes');
+    const filePickRow = document.getElementById('filePickRow');
+    const filePickBtn = document.getElementById('filePickBtn');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const convertBtn = document.getElementById('convertBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let mode = 'j2c';
+    let lastOutput = '';
+    let lastDownloadName = 'output.csv';
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+    function setOutput(text) {
+      lastOutput = text;
+      output.textContent = text;
+    }
+    function setStats(s) { stats.textContent = s; }
+
+    tabs.forEach(t => t.addEventListener('click', () => switchMode(t.dataset.mode)));
+    function switchMode(m) {
+      mode = m;
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+      if (m === 'j2c') {
+        inputLabel.textContent = 'JSON input';
+        outputTitle.textContent = 'CSV output';
+        input.placeholder = '[{"name":"Anna","age":30},{"name":"Ben","age":25}]';
+        csvOptions.classList.add('hidden');
+        filePickRow.classList.add('hidden');
+        lastDownloadName = 'output.csv';
+      } else {
+        inputLabel.textContent = 'CSV input';
+        outputTitle.textContent = 'JSON output';
+        input.placeholder = 'name,age\nAnna,30\nBen,25';
+        csvOptions.classList.remove('hidden');
+        filePickRow.classList.remove('hidden');
+        lastDownloadName = 'output.json';
+      }
+      setOutput(''); setStats(''); clearError();
+    }
+
+    // ─────────────── CSV parsing/writing (RFC 4180) ───────────────
+    function parseCSV(text) {
+      const rows = [];
+      let row = [];
+      let field = '';
+      let inQuote = false;
+      let i = 0;
+      const n = text.length;
+      while (i < n) {
+        const c = text[i];
+        if (inQuote) {
+          if (c === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+            inQuote = false; i++; continue;
+          }
+          field += c; i++; continue;
+        }
+        if (c === '"') { inQuote = true; i++; continue; }
+        if (c === ',') { row.push(field); field = ''; i++; continue; }
+        if (c === '\r') { i++; continue; }
+        if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+        field += c; i++;
+      }
+      if (field.length || row.length) { row.push(field); rows.push(row); }
+      return rows;
+    }
+    function escapeCSVField(v) {
+      if (v === null || v === undefined) return '';
+      const s = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+      if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function writeCSV(rows) {
+      return rows.map(r => r.map(escapeCSVField).join(',')).join('\r\n');
+    }
+
+    function coerce(s) {
+      if (s === '') return null;
+      if (s === 'true') return true;
+      if (s === 'false') return false;
+      if (s === 'null') return null;
+      if (/^-?\d+$/.test(s)) {
+        const n = Number(s);
+        if (Number.isSafeInteger(n)) return n;
+      }
+      if (/^-?\d+\.\d+([eE][+-]?\d+)?$/.test(s) || /^-?\d+[eE][+-]?\d+$/.test(s)) {
+        return Number(s);
+      }
+      return s;
+    }
+
+    // ─────────────── JSON → CSV ───────────────
+    function jsonToCsv(src) {
+      let data;
+      try { data = JSON.parse(src); }
+      catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+      if (!Array.isArray(data)) throw new Error('Top-level value must be an array of objects.');
+      if (!data.length) return '';
+
+      const headers = [];
+      const seen = new Set();
+      for (const row of data) {
+        if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+          throw new Error('Each array item must be an object.');
+        }
+        for (const k of Object.keys(row)) {
+          if (!seen.has(k)) { seen.add(k); headers.push(k); }
+        }
+      }
+      const rows = [headers];
+      for (const obj of data) {
+        rows.push(headers.map(h => obj[h]));
+      }
+      return writeCSV(rows);
+    }
+
+    // ─────────────── CSV → JSON ───────────────
+    function csvToJson(src, doCoerce) {
+      const rows = parseCSV(src);
+      if (!rows.length) return [];
+      const headers = rows[0].map(h => h.trim());
+      const out = [];
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        // Skip fully-empty rows
+        if (row.length === 1 && row[0] === '') continue;
+        const obj = {};
+        for (let j = 0; j < headers.length; j++) {
+          const raw = row[j] === undefined ? '' : row[j];
+          obj[headers[j]] = doCoerce ? coerce(raw) : raw;
+        }
+        out.push(obj);
+      }
+      return out;
+    }
+
+    function convert() {
+      clearError();
+      const src = input.value;
+      if (!src.trim()) { setOutput(''); setStats(''); return; }
+      try {
+        if (mode === 'j2c') {
+          const csv = jsonToCsv(src);
+          setOutput(csv);
+          const lines = csv ? csv.split(/\r?\n/).length : 0;
+          setStats(lines + ' line' + (lines === 1 ? '' : 's') + ' · ' + new Blob([csv]).size + ' bytes');
+          lastDownloadName = 'output.csv';
+        } else {
+          const arr = csvToJson(src, coerceTypes.checked);
+          const json = JSON.stringify(arr, null, 2);
+          setOutput(json);
+          setStats(arr.length + ' record' + (arr.length === 1 ? '' : 's') + ' · ' + new Blob([json]).size + ' bytes');
+          lastDownloadName = 'output.json';
+        }
+      } catch (e) {
+        showError(e.message);
+        setOutput(''); setStats('');
+      }
+    }
+
+    convertBtn.addEventListener('click', convert);
+    clearBtn.addEventListener('click', () => {
+      input.value = ''; setOutput(''); setStats(''); clearError();
+      fileName.textContent = 'No file chosen';
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      if (!lastOutput) return;
+      try {
+        await navigator.clipboard.writeText(lastOutput);
+        const o = copyBtn.textContent;
+        copyBtn.textContent = '✓ Copied';
+        setTimeout(() => copyBtn.textContent = o, 1500);
+      } catch { showError('Copy failed.'); }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!lastOutput) return;
+      const mime = mode === 'j2c' ? 'text/csv' : 'application/json';
+      const blob = new Blob([lastOutput], { type: mime });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = lastDownloadName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    filePickBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async e => {
+      const f = e.target.files[0];
+      if (!f) return;
+      try {
+        const text = await f.text();
+        input.value = text;
+        fileName.textContent = f.name;
+        convert();
+      } catch (err) { showError('Could not read file: ' + err.message); }
+      fileInput.value = '';
+    });
+
+    // Auto-convert on input changes after a short pause
+    let timer;
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(convert, 150);
+    });
+    coerceTypes.addEventListener('change', convert);
+  </script>
+</body>
+</html>

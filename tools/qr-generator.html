@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QR Code Generator — BkkBoost Tools</title>
+  <meta name="description" content="Generate QR codes for URLs, plain text, WiFi networks, and vCards. Customize size, error correction, and colors.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <style>
+    .tabs-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .tab-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      padding: 7px 14px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--border2); }
+    .tab-btn.active {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: white;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .field-grid > .full { grid-column: 1 / -1; }
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      align-items: end;
+    }
+    .slider-row { display: flex; align-items: center; gap: 12px; }
+    .slider-row input[type=range] { flex: 1; }
+    .slider-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      min-width: 56px;
+      text-align: right;
+    }
+    .color-row { display: flex; align-items: center; gap: 10px; }
+    .color-row input[type="color"] {
+      width: 44px; height: 36px; padding: 2px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      background: var(--surface2);
+    }
+    .qr-stage {
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 240px;
+      align-items: center;
+    }
+    .qr-stage canvas, .qr-stage svg { display: block; max-width: 100%; height: auto; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+    @media (max-width: 600px) {
+      .field-grid, .controls-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>QR Code Generator</h1>
+      <p class="tool-desc">Generate QR codes for URLs, plain text, WiFi networks, and vCards. Live preview, custom colors, PNG and SVG export.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Content</div>
+      <div class="tabs-row" id="tabs">
+        <button class="tab-btn active" data-tab="url">URL</button>
+        <button class="tab-btn" data-tab="text">Plain Text</button>
+        <button class="tab-btn" data-tab="wifi">WiFi</button>
+        <button class="tab-btn" data-tab="vcard">vCard</button>
+      </div>
+
+      <div class="tab-panel active" data-panel="url">
+        <label for="urlInput">URL</label>
+        <input type="text" id="urlInput" placeholder="https://example.com" value="https://bkkboost.com">
+      </div>
+
+      <div class="tab-panel" data-panel="text">
+        <label for="textInput">Text</label>
+        <textarea id="textInput" placeholder="Type or paste any text..." style="min-height: 120px;"></textarea>
+      </div>
+
+      <div class="tab-panel" data-panel="wifi">
+        <div class="field-grid">
+          <div class="full">
+            <label for="wifiSsid">Network name (SSID)</label>
+            <input type="text" id="wifiSsid" placeholder="MyWiFi">
+          </div>
+          <div>
+            <label for="wifiPassword">Password</label>
+            <input type="text" id="wifiPassword" placeholder="••••••••">
+          </div>
+          <div>
+            <label for="wifiEncryption">Encryption</label>
+            <select id="wifiEncryption">
+              <option value="WPA">WPA / WPA2</option>
+              <option value="WEP">WEP</option>
+              <option value="nopass">None (open)</option>
+            </select>
+          </div>
+          <div class="full">
+            <label style="display: flex; align-items: center; gap: 8px; margin: 0;">
+              <input type="checkbox" id="wifiHidden" style="width: auto;"> Hidden network
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="vcard">
+        <div class="field-grid">
+          <div>
+            <label for="vcFirst">First name</label>
+            <input type="text" id="vcFirst" placeholder="Jane">
+          </div>
+          <div>
+            <label for="vcLast">Last name</label>
+            <input type="text" id="vcLast" placeholder="Doe">
+          </div>
+          <div>
+            <label for="vcPhone">Phone</label>
+            <input type="text" id="vcPhone" placeholder="+66 81 234 5678">
+          </div>
+          <div>
+            <label for="vcEmail">Email</label>
+            <input type="email" id="vcEmail" placeholder="jane@example.com">
+          </div>
+          <div class="full">
+            <label for="vcCompany">Company</label>
+            <input type="text" id="vcCompany" placeholder="Acme Inc.">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Style</div>
+      <div class="controls-grid">
+        <div>
+          <label for="sizeRange">Size <span style="color: var(--text3);">(<span id="sizeVal">320</span>px)</span></label>
+          <div class="slider-row">
+            <input type="range" id="sizeRange" min="200" max="600" step="10" value="320">
+          </div>
+        </div>
+        <div>
+          <label for="ecLevel">Error correction</label>
+          <select id="ecLevel">
+            <option value="L">L — ~7% recovery</option>
+            <option value="M" selected>M — ~15% recovery</option>
+            <option value="Q">Q — ~25% recovery</option>
+            <option value="H">H — ~30% recovery</option>
+          </select>
+        </div>
+        <div>
+          <label>Foreground</label>
+          <div class="color-row">
+            <input type="color" id="fgColor" value="#0D0D12">
+            <input type="text" id="fgHex" value="#0D0D12" style="font-family: 'DM Mono', monospace;">
+          </div>
+        </div>
+        <div>
+          <label>Background</label>
+          <div class="color-row">
+            <input type="color" id="bgColor" value="#FFFFFF">
+            <input type="text" id="bgHex" value="#FFFFFF" style="font-family: 'DM Mono', monospace;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div class="panel">
+      <div class="panel-title">Preview</div>
+      <div class="qr-stage" id="qrStage"></div>
+      <div class="actions">
+        <button class="btn-primary" id="downloadPngBtn">⬇ Download PNG</button>
+        <button class="btn-secondary" id="downloadSvgBtn">⬇ Download SVG</button>
+        <button class="btn-secondary" id="copySvgBtn">📋 Copy SVG</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab-btn');
+    const panels = document.querySelectorAll('.tab-panel');
+    const errorBar = document.getElementById('errorBar');
+    const qrStage = document.getElementById('qrStage');
+    const sizeRange = document.getElementById('sizeRange');
+    const sizeVal = document.getElementById('sizeVal');
+    const ecLevel = document.getElementById('ecLevel');
+    const fgColor = document.getElementById('fgColor');
+    const bgColor = document.getElementById('bgColor');
+    const fgHex = document.getElementById('fgHex');
+    const bgHex = document.getElementById('bgHex');
+
+    let currentTab = 'url';
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    tabs.forEach(t => t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('active'));
+      panels.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      currentTab = t.dataset.tab;
+      document.querySelector('[data-panel="' + currentTab + '"]').classList.add('active');
+      render();
+    }));
+
+    function escapeWifi(s) {
+      return s.replace(/([\\;,:"])/g, '\\$1');
+    }
+    function escapeVcard(s) {
+      return s.replace(/([\\;,])/g, '\\$1').replace(/\n/g, '\\n');
+    }
+
+    function buildPayload() {
+      if (currentTab === 'url') {
+        return document.getElementById('urlInput').value.trim();
+      }
+      if (currentTab === 'text') {
+        return document.getElementById('textInput').value;
+      }
+      if (currentTab === 'wifi') {
+        const ssid = document.getElementById('wifiSsid').value;
+        const pw = document.getElementById('wifiPassword').value;
+        const enc = document.getElementById('wifiEncryption').value;
+        const hidden = document.getElementById('wifiHidden').checked;
+        if (!ssid) return '';
+        const t = enc === 'nopass' ? 'nopass' : enc;
+        let s = 'WIFI:T:' + t + ';S:' + escapeWifi(ssid) + ';';
+        if (enc !== 'nopass') s += 'P:' + escapeWifi(pw) + ';';
+        if (hidden) s += 'H:true;';
+        s += ';';
+        return s;
+      }
+      if (currentTab === 'vcard') {
+        const first = document.getElementById('vcFirst').value;
+        const last = document.getElementById('vcLast').value;
+        const phone = document.getElementById('vcPhone').value;
+        const email = document.getElementById('vcEmail').value;
+        const company = document.getElementById('vcCompany').value;
+        if (!first && !last && !phone && !email && !company) return '';
+        const lines = ['BEGIN:VCARD', 'VERSION:3.0'];
+        const fn = [first, last].filter(Boolean).join(' ');
+        if (fn) lines.push('FN:' + escapeVcard(fn));
+        if (last || first) lines.push('N:' + escapeVcard(last) + ';' + escapeVcard(first) + ';;;');
+        if (company) lines.push('ORG:' + escapeVcard(company));
+        if (phone) lines.push('TEL:' + escapeVcard(phone));
+        if (email) lines.push('EMAIL:' + escapeVcard(email));
+        lines.push('END:VCARD');
+        return lines.join('\n');
+      }
+      return '';
+    }
+
+    function generateQr(payload, ec) {
+      // typeNumber 0 = auto-detect smallest
+      const qr = qrcode(0, ec);
+      qr.addData(payload);
+      qr.make();
+      return qr;
+    }
+
+    function renderToCanvas(qr, size, fg, bg) {
+      const count = qr.getModuleCount();
+      const margin = 4;
+      const cells = count + margin * 2;
+      const cellSize = Math.floor(size / cells);
+      const realSize = cellSize * cells;
+      const canvas = document.createElement('canvas');
+      canvas.width = realSize;
+      canvas.height = realSize;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, realSize, realSize);
+      ctx.fillStyle = fg;
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (qr.isDark(r, c)) {
+            ctx.fillRect((c + margin) * cellSize, (r + margin) * cellSize, cellSize, cellSize);
+          }
+        }
+      }
+      return canvas;
+    }
+
+    function buildSvg(qr, size, fg, bg) {
+      const count = qr.getModuleCount();
+      const margin = 4;
+      const cells = count + margin * 2;
+      const cellSize = size / cells;
+      let path = '';
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (qr.isDark(r, c)) {
+            const x = (c + margin) * cellSize;
+            const y = (r + margin) * cellSize;
+            path += 'M' + x + ' ' + y + 'h' + cellSize + 'v' + cellSize + 'h-' + cellSize + 'z';
+          }
+        }
+      }
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '">' +
+        '<rect width="' + size + '" height="' + size + '" fill="' + bg + '"/>' +
+        '<path d="' + path + '" fill="' + fg + '"/>' +
+        '</svg>';
+    }
+
+    let currentCanvas = null;
+    let currentSvg = '';
+
+    function render() {
+      clearError();
+      const payload = buildPayload();
+      qrStage.innerHTML = '';
+      currentCanvas = null;
+      currentSvg = '';
+      if (!payload) {
+        qrStage.innerHTML = '<div style="color: var(--text3); font-size: 13px;">Enter content to generate a QR code.</div>';
+        return;
+      }
+      try {
+        const qr = generateQr(payload, ecLevel.value);
+        const size = parseInt(sizeRange.value, 10);
+        const fg = fgHex.value || '#000000';
+        const bg = bgHex.value || '#FFFFFF';
+        currentCanvas = renderToCanvas(qr, size, fg, bg);
+        currentSvg = buildSvg(qr, size, fg, bg);
+        qrStage.appendChild(currentCanvas);
+      } catch (e) {
+        showError('Could not generate QR code: ' + (e.message || e));
+      }
+    }
+
+    // Wire up live updates
+    ['urlInput', 'textInput', 'wifiSsid', 'wifiPassword', 'wifiEncryption', 'wifiHidden',
+     'vcFirst', 'vcLast', 'vcPhone', 'vcEmail', 'vcCompany'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', render);
+      if (el) el.addEventListener('change', render);
+    });
+
+    sizeRange.addEventListener('input', () => {
+      sizeVal.textContent = sizeRange.value;
+      render();
+    });
+    ecLevel.addEventListener('change', render);
+
+    function syncColors(picker, hex) {
+      picker.addEventListener('input', () => { hex.value = picker.value.toUpperCase(); render(); });
+      hex.addEventListener('input', () => {
+        const v = hex.value.trim();
+        if (/^#[0-9A-Fa-f]{6}$/.test(v)) { picker.value = v; render(); }
+      });
+    }
+    syncColors(fgColor, fgHex);
+    syncColors(bgColor, bgHex);
+
+    // Download PNG
+    document.getElementById('downloadPngBtn').addEventListener('click', () => {
+      if (!currentCanvas) return;
+      currentCanvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'qr-code.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      });
+    });
+
+    // Download SVG
+    document.getElementById('downloadSvgBtn').addEventListener('click', () => {
+      if (!currentSvg) return;
+      const blob = new Blob([currentSvg], { type: 'image/svg+xml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'qr-code.svg';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    // Copy SVG
+    const copySvgBtn = document.getElementById('copySvgBtn');
+    copySvgBtn.addEventListener('click', async () => {
+      if (!currentSvg) return;
+      try {
+        await navigator.clipboard.writeText(currentSvg);
+        const o = copySvgBtn.textContent;
+        copySvgBtn.textContent = '✓ Copied';
+        setTimeout(() => copySvgBtn.textContent = o, 1500);
+      } catch (e) { showError('Copy failed.'); }
+    });
+
+    // initial render
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Word Counter — BkkBoost Tools</title>
+  <meta name="description" content="Count words, characters, sentences, paragraphs, and estimated reading time. 100% client-side.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .stat-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .actions { display: flex; gap: 10px; margin-top: 16px; }
+    .status { font-size: 12px; color: var(--text3); margin-top: 8px; min-height: 16px; }
+    @media (max-width: 600px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Word Counter</h1>
+      <p class="tool-desc">Count words, characters, sentences, paragraphs, and reading time. Updates as you type.</p>
+    </div>
+    <div class="panel">
+      <label for="input">Text</label>
+      <textarea id="input" placeholder="Paste or type your text here…" style="min-height: 220px;"></textarea>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Statistics</div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Characters</div><div class="stat-value" id="s-chars">0</div></div>
+        <div class="stat-card"><div class="stat-label">Characters (no spaces)</div><div class="stat-value" id="s-chars-ns">0</div></div>
+        <div class="stat-card"><div class="stat-label">Words</div><div class="stat-value" id="s-words">0</div></div>
+        <div class="stat-card"><div class="stat-label">Sentences</div><div class="stat-value" id="s-sentences">0</div></div>
+        <div class="stat-card"><div class="stat-label">Paragraphs</div><div class="stat-value" id="s-paragraphs">0</div></div>
+        <div class="stat-card"><div class="stat-label">Reading time</div><div class="stat-value" id="s-reading">0s</div></div>
+      </div>
+      <div class="actions">
+        <button class="btn-secondary" id="copyBtn">📋 Copy stats</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your text never leaves your device</footer>
+  <script>
+    const input = document.getElementById('input');
+    const sChars = document.getElementById('s-chars');
+    const sCharsNs = document.getElementById('s-chars-ns');
+    const sWords = document.getElementById('s-words');
+    const sSentences = document.getElementById('s-sentences');
+    const sParagraphs = document.getElementById('s-paragraphs');
+    const sReading = document.getElementById('s-reading');
+    const status = document.getElementById('status');
+
+    function compute(text) {
+      const chars = text.length;
+      const charsNs = text.replace(/\s/g, '').length;
+      const trimmed = text.trim();
+      const words = trimmed === '' ? 0 : trimmed.split(/\s+/).length;
+      const sentences = (text.match(/[^.!?]+[.!?]+/g) || []).length;
+      const paragraphs = trimmed === '' ? 0 : text.split(/\n\s*\n/).filter(p => p.trim().length > 0).length;
+      const seconds = Math.round((words / 200) * 60);
+      let reading;
+      if (seconds < 60) reading = seconds + 's';
+      else reading = Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+      return { chars, charsNs, words, sentences, paragraphs, reading };
+    }
+
+    function update() {
+      const r = compute(input.value);
+      sChars.textContent = r.chars.toLocaleString();
+      sCharsNs.textContent = r.charsNs.toLocaleString();
+      sWords.textContent = r.words.toLocaleString();
+      sSentences.textContent = r.sentences.toLocaleString();
+      sParagraphs.textContent = r.paragraphs.toLocaleString();
+      sReading.textContent = r.reading;
+    }
+
+    input.addEventListener('input', update);
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const r = compute(input.value);
+      const text = `Characters: ${r.chars}
+Characters (no spaces): ${r.charsNs}
+Words: ${r.words}
+Sentences: ${r.sentences}
+Paragraphs: ${r.paragraphs}
+Reading time: ${r.reading}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        status.textContent = 'Stats copied to clipboard.';
+        setTimeout(() => status.textContent = '', 2000);
+      } catch (e) {
+        status.textContent = 'Could not copy.';
+      }
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      input.value = '';
+      update();
+      input.focus();
+    });
+
+    update();
+  </script>
+</body>
+</html>

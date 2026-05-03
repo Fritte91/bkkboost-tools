@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Preview — BkkBoost Tools</title>
+  <meta name="description" content="Live Markdown editor with rendered HTML preview. Copy the rendered HTML with one click.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <style>
+    .editor-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 32px 24px 48px;
+    }
+    .editor-header { margin-bottom: 20px; }
+    .editor-header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .editor-header .tool-desc { color: var(--text2); font-size: 15px; }
+
+    .editor-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    @media (max-width: 900px) { .editor-grid { grid-template-columns: 1fr; } }
+
+    .pane {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      display: flex;
+      flex-direction: column;
+      min-height: 600px;
+    }
+    .pane-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pane-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .pane textarea {
+      flex: 1;
+      border: none;
+      background: transparent;
+      border-radius: 0;
+      padding: 16px;
+      font-family: 'DM Mono', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      resize: none;
+      min-height: 0;
+    }
+    .pane textarea:focus { background: transparent; }
+
+    .preview {
+      flex: 1;
+      padding: 16px 22px;
+      overflow: auto;
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--text);
+    }
+    .preview h1, .preview h2, .preview h3, .preview h4, .preview h5, .preview h6 {
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+      margin: 1.4em 0 0.5em;
+    }
+    .preview h1:first-child, .preview h2:first-child, .preview h3:first-child { margin-top: 0; }
+    .preview h1 { font-size: 28px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .preview h2 { font-size: 22px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .preview h3 { font-size: 18px; }
+    .preview h4 { font-size: 16px; color: var(--text2); }
+    .preview h5, .preview h6 { font-size: 14px; color: var(--text2); }
+    .preview p { margin: 0.7em 0; }
+    .preview a { color: var(--orange); text-decoration: underline; text-underline-offset: 2px; }
+    .preview a:hover { color: var(--orange-light); }
+    .preview strong { color: var(--text); font-weight: 600; }
+    .preview em { color: var(--text); }
+    .preview ul, .preview ol { padding-left: 1.6em; margin: 0.7em 0; }
+    .preview li { margin: 0.25em 0; }
+    .preview blockquote {
+      border-left: 3px solid var(--orange);
+      padding: 4px 14px;
+      margin: 0.8em 0;
+      color: var(--text2);
+      background: rgba(232,83,26,0.04);
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+    .preview blockquote p { margin: 0.3em 0; }
+    .preview hr {
+      border: none;
+      height: 1px;
+      background: var(--border2);
+      margin: 1.6em 0;
+    }
+    .preview code {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.88em;
+      background: var(--surface3);
+      color: #FCE2A6;
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .preview pre {
+      background: #0A0A10;
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      overflow: auto;
+      margin: 0.9em 0;
+    }
+    .preview pre code {
+      background: transparent;
+      color: var(--text);
+      padding: 0;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .preview img {
+      max-width: 100%;
+      border-radius: var(--radius-sm);
+      margin: 0.6em 0;
+    }
+    .preview table {
+      border-collapse: collapse;
+      margin: 0.9em 0;
+      width: 100%;
+      font-size: 14px;
+    }
+    .preview th, .preview td {
+      border: 1px solid var(--border2);
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .preview th {
+      background: var(--surface2);
+      font-weight: 600;
+      color: var(--text);
+    }
+    .preview tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+    .preview input[type="checkbox"] { margin-right: 6px; }
+
+    .copy-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { border-color: var(--text3); background: var(--surface3); }
+    .copy-btn.copied { color: #86EFAC; border-color: rgba(34,197,94,0.4); }
+
+    .word-count {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--text3);
+      margin-right: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="editor-container">
+    <div class="editor-header">
+      <h1>Markdown Preview</h1>
+      <p class="tool-desc">Type Markdown on the left, see it rendered live on the right.</p>
+    </div>
+
+    <div class="editor-grid">
+      <div class="pane">
+        <div class="pane-head">
+          <span class="pane-title">Markdown</span>
+          <span class="word-count" id="counter">0 chars</span>
+        </div>
+        <textarea id="md" spellcheck="false" placeholder="# Hello, world!
+
+Type some **Markdown** here…"></textarea>
+      </div>
+      <div class="pane">
+        <div class="pane-head">
+          <span class="pane-title">Preview</span>
+          <button class="copy-btn" id="copyBtn">📋 Copy HTML</button>
+        </div>
+        <div class="preview" id="preview"></div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const md = document.getElementById('md');
+    const preview = document.getElementById('preview');
+    const counter = document.getElementById('counter');
+    const copyBtn = document.getElementById('copyBtn');
+
+    md.value = '# Welcome\n\nThis is a **Markdown preview** powered by marked.js.\n\n' +
+      '## Features\n\n- Live rendering as you type\n- GitHub-flavored markdown\n- Tables, code blocks, task lists\n\n' +
+      '### Code\n\n```js\nfunction greet(name) {\n  return `Hello, ${name}!`;\n}\n```\n\n' +
+      'Inline `code` works too.\n\n> A blockquote, with *emphasis* and a [link](https://example.com).\n\n' +
+      '| Tool | Type |\n|------|------|\n| Markdown Preview | Editor |\n| JSON Formatter | Developer |\n\n' +
+      '---\n\nType to replace this content.';
+
+    marked.setOptions({
+      gfm: true,
+      breaks: false,
+      headerIds: false,
+      mangle: false
+    });
+
+    let renderTimer;
+    let lastHTML = '';
+    function render() {
+      try {
+        lastHTML = marked.parse(md.value);
+        preview.innerHTML = lastHTML;
+      } catch (e) {
+        preview.innerHTML = '<p style="color:#FCA5A5;">Render error: ' + e.message + '</p>';
+      }
+      counter.textContent = md.value.length.toLocaleString() + ' chars · ' +
+        (md.value.trim() ? md.value.trim().split(/\s+/).length : 0) + ' words';
+    }
+    function schedule() {
+      clearTimeout(renderTimer);
+      renderTimer = setTimeout(render, 150);
+    }
+
+    md.addEventListener('input', schedule);
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(lastHTML);
+        copyBtn.textContent = '✓ Copied';
+        copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = '📋 Copy HTML'; copyBtn.classList.remove('copied'); }, 1500);
+      } catch (e) {
+        copyBtn.textContent = 'Copy failed';
+        setTimeout(() => copyBtn.textContent = '📋 Copy HTML', 1500);
+      }
+    });
+
+    // Tab key inserts two spaces instead of changing focus
+    md.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const start = md.selectionStart, end = md.selectionEnd;
+        md.value = md.value.slice(0, start) + '  ' + md.value.slice(end);
+        md.selectionStart = md.selectionEnd = start + 2;
+        schedule();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>

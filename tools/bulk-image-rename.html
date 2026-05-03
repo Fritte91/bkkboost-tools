@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bulk Image Rename — BkkBoost Tools</title>
+  <meta name="description" content="Rename multiple images at once with a counter pattern, then download them all in a ZIP.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <style>
+    .pattern-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+    .hint code {
+      font-family: 'DM Mono', monospace;
+      background: var(--surface2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 11px;
+    }
+    .file-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 460px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: 56px 1fr 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+    }
+    .file-thumb {
+      width: 48px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #14141a;
+    }
+    .file-orig {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text3);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-new input {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 6px 8px;
+    }
+    .file-remove {
+      background: transparent;
+      border: none;
+      color: var(--text3);
+      cursor: pointer;
+      font-size: 18px;
+      padding: 4px 10px;
+      line-height: 1;
+    }
+    .file-remove:hover { color: #FCA5A5; }
+    .summary {
+      font-size: 13px;
+      color: var(--text2);
+      margin-bottom: 12px;
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+    @media (max-width: 600px) {
+      .file-row { grid-template-columns: 48px 1fr auto; }
+      .file-orig { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Bulk Image Rename</h1>
+      <p class="tool-desc">Drop multiple images, apply a naming pattern, and download them all in one ZIP.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">📁</div>
+      <div class="dropzone-title">Drop images or click to browse</div>
+      <div class="dropzone-subtitle">Select multiple files at once</div>
+      <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Naming pattern</div>
+        <div class="pattern-row">
+          <input type="text" id="pattern" value="photo-{n}" placeholder="e.g. holiday-{n}">
+          <button class="btn-secondary" id="applyBtn">Apply</button>
+        </div>
+        <div class="hint">
+          Use <code>{n}</code> for the counter and <code>{ext}</code> for the original extension.<br>
+          Example: <code>vacation-{n}</code> → <code>vacation-1.jpg</code>, <code>vacation-2.jpg</code>…
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="summary" id="summary">0 files</div>
+        <div class="file-list" id="fileList"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="zipBtn">⬇ Download All as ZIP</button>
+        <button class="btn-secondary" id="addMoreBtn">＋ Add more</button>
+        <button class="btn-secondary" id="resetBtn">🔄 Clear all</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const patternIn = document.getElementById('pattern');
+    const applyBtn = document.getElementById('applyBtn');
+    const fileList = document.getElementById('fileList');
+    const summary = document.getElementById('summary');
+    const zipBtn = document.getElementById('zipBtn');
+    const addMoreBtn = document.getElementById('addMoreBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let entries = [];
+    let nextId = 1;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files.length) addFiles(e.target.files); });
+    addMoreBtn.addEventListener('click', () => fileInput.click());
+
+    function addFiles(files) {
+      clearError();
+      let added = 0;
+      for (const f of files) {
+        if (!f.type.startsWith('image/')) continue;
+        const ext = (f.name.match(/\.[^.]+$/) || ['.png'])[0].slice(1).toLowerCase();
+        entries.push({
+          id: nextId++,
+          file: f,
+          blobUrl: URL.createObjectURL(f),
+          originalName: f.name,
+          ext,
+          newName: ''
+        });
+        added++;
+      }
+      fileInput.value = '';
+      if (!added && !entries.length) {
+        showError('No image files were selected.');
+        return;
+      }
+      workspace.classList.remove('hidden');
+      applyPattern();
+      render();
+    }
+
+    function applyPattern() {
+      const pat = patternIn.value || 'image-{n}';
+      const padWidth = String(entries.length).length;
+      entries.forEach((e, i) => {
+        const n = String(i + 1).padStart(padWidth, '0');
+        let name = pat
+          .replace(/\{n\}/g, n)
+          .replace(/\{ext\}/g, e.ext);
+        if (!/\.[^.]+$/.test(name)) name += '.' + e.ext;
+        e.newName = name;
+      });
+    }
+
+    applyBtn.addEventListener('click', () => { applyPattern(); render(); });
+    patternIn.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); applyPattern(); render(); }
+    });
+
+    function render() {
+      summary.textContent = entries.length + ' file' + (entries.length === 1 ? '' : 's');
+      fileList.innerHTML = '';
+      entries.forEach(e => {
+        const row = document.createElement('div');
+        row.className = 'file-row';
+
+        const thumb = document.createElement('img');
+        thumb.className = 'file-thumb';
+        thumb.src = e.blobUrl;
+        thumb.alt = '';
+
+        const orig = document.createElement('div');
+        orig.className = 'file-orig';
+        orig.title = e.originalName;
+        orig.textContent = e.originalName;
+
+        const newWrap = document.createElement('div');
+        newWrap.className = 'file-new';
+        const newIn = document.createElement('input');
+        newIn.type = 'text';
+        newIn.dataset.id = e.id;
+        newIn.value = e.newName;
+        newWrap.appendChild(newIn);
+
+        const rm = document.createElement('button');
+        rm.className = 'file-remove';
+        rm.dataset.id = e.id;
+        rm.title = 'Remove';
+        rm.textContent = '×';
+
+        row.appendChild(thumb);
+        row.appendChild(orig);
+        row.appendChild(newWrap);
+        row.appendChild(rm);
+        fileList.appendChild(row);
+      });
+    }
+
+    fileList.addEventListener('input', e => {
+      if (e.target.tagName !== 'INPUT') return;
+      const id = +e.target.dataset.id;
+      const ent = entries.find(x => x.id === id);
+      if (ent) ent.newName = e.target.value;
+    });
+
+    fileList.addEventListener('click', e => {
+      const btn = e.target.closest('.file-remove');
+      if (!btn) return;
+      const id = +btn.dataset.id;
+      const idx = entries.findIndex(x => x.id === id);
+      if (idx >= 0) {
+        URL.revokeObjectURL(entries[idx].blobUrl);
+        entries.splice(idx, 1);
+      }
+      if (!entries.length) { reset(); return; }
+      render();
+    });
+
+    zipBtn.addEventListener('click', async () => {
+      if (!entries.length) return;
+      clearError();
+      zipBtn.disabled = true;
+      const orig = zipBtn.textContent;
+      zipBtn.textContent = 'Building ZIP…';
+      try {
+        const zip = new JSZip();
+        const used = new Map();
+        for (const e of entries) {
+          let name = (e.newName || '').trim() || ('image-' + e.id + '.' + e.ext);
+          while (used.has(name)) {
+            const c = used.get(name) + 1;
+            used.set(name, c);
+            const dot = name.lastIndexOf('.');
+            name = dot > 0
+              ? name.slice(0, dot) + '-' + c + name.slice(dot)
+              : name + '-' + c;
+          }
+          used.set(name, 1);
+          zip.file(name, e.file);
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        saveAs(blob, 'renamed-images.zip');
+      } catch (err) {
+        showError('Could not build ZIP: ' + err.message);
+      } finally {
+        zipBtn.disabled = false;
+        zipBtn.textContent = orig;
+      }
+    });
+
+    function reset() {
+      entries.forEach(e => URL.revokeObjectURL(e.blobUrl));
+      entries = [];
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      fileList.innerHTML = '';
+      clearError();
+    }
+    resetBtn.addEventListener('click', reset);
+  </script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Palette from Image — BkkBoost Tools</title>
+  <meta name="description" content="Extract dominant colors from any image. Click a swatch to copy its HEX value.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .palette-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .swatch {
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .swatch:hover { transform: translateY(-2px); border-color: var(--border2); }
+    .swatch-color { height: 80px; }
+    .swatch-meta {
+      padding: 8px 10px;
+      font-family: 'DM Mono', monospace;
+    }
+    .swatch-hex { color: var(--text); font-size: 13px; font-weight: 500; }
+    .swatch-rgb { color: var(--text3); margin-top: 2px; font-size: 11px; }
+    .copied-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(40px);
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      opacity: 0;
+      transition: all 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .copied-toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .preview-shell {
+      background: #14141a;
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+    .preview-shell img { max-height: 280px; margin: 0 auto; display: inline-block; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Palette from Image</h1>
+      <p class="tool-desc">Extract dominant colors from any image. Click a swatch to copy its HEX value.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">🖌</div>
+      <div class="dropzone-title">Drop an image or click to browse</div>
+      <div class="dropzone-subtitle">PNG, JPEG, WebP, GIF</div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Source</div>
+        <div class="preview-shell"><img id="preview" alt=""></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Settings</div>
+        <label for="countSel">Number of colors</label>
+        <select id="countSel">
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8" selected>8</option>
+        </select>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Palette</div>
+        <div class="palette-grid" id="palette"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-secondary" id="resetBtn">🔄 New image</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+  <div class="copied-toast" id="toast">Copied</div>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const preview = document.getElementById('preview');
+    const palette = document.getElementById('palette');
+    const countSel = document.getElementById('countSel');
+    const resetBtn = document.getElementById('resetBtn');
+    const toast = document.getElementById('toast');
+
+    let imageObj = null;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => toast.classList.remove('show'), 1400);
+    }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError();
+      if (!file.type.startsWith('image/')) { showError('Please choose an image file.'); return; }
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        imageObj = img;
+        if (preview.src) URL.revokeObjectURL(preview.src);
+        preview.src = url;
+        workspace.classList.remove('hidden');
+        extract();
+      };
+      img.onerror = () => showError('Could not decode this image.');
+      img.src = url;
+    }
+
+    countSel.addEventListener('change', extract);
+
+    function extract() {
+      if (!imageObj) return;
+      const max = 200;
+      const ratio = Math.min(1, max / Math.max(imageObj.naturalWidth, imageObj.naturalHeight));
+      const w = Math.max(1, Math.round(imageObj.naturalWidth * ratio));
+      const h = Math.max(1, Math.round(imageObj.naturalHeight * ratio));
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(imageObj, 0, 0, w, h);
+      let pixels;
+      try { pixels = ctx.getImageData(0, 0, w, h).data; }
+      catch (e) { showError('Could not read image pixels (CORS).'); return; }
+
+      const buckets = new Map();
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (pixels[i + 3] < 128) continue;
+        const r = pixels[i] >> 4;
+        const g = pixels[i + 1] >> 4;
+        const b = pixels[i + 2] >> 4;
+        const key = (r << 8) | (g << 4) | b;
+        let bucket = buckets.get(key);
+        if (!bucket) { bucket = { r: 0, g: 0, b: 0, n: 0 }; buckets.set(key, bucket); }
+        bucket.r += pixels[i];
+        bucket.g += pixels[i + 1];
+        bucket.b += pixels[i + 2];
+        bucket.n += 1;
+      }
+      const sorted = [...buckets.values()]
+        .map(b => ({
+          r: Math.round(b.r / b.n),
+          g: Math.round(b.g / b.n),
+          b: Math.round(b.b / b.n),
+          n: b.n
+        }))
+        .sort((a, b) => b.n - a.n);
+
+      const target = parseInt(countSel.value, 10);
+      const picked = [];
+      const minDist = 36;
+      for (const c of sorted) {
+        const tooClose = picked.some(p => {
+          const dr = p.r - c.r, dg = p.g - c.g, db = p.b - c.b;
+          return Math.sqrt(dr * dr + dg * dg + db * db) < minDist;
+        });
+        if (!tooClose) picked.push(c);
+        if (picked.length >= target) break;
+      }
+      let i = 0;
+      while (picked.length < target && i < sorted.length) {
+        if (!picked.includes(sorted[i])) picked.push(sorted[i]);
+        i++;
+      }
+      renderPalette(picked);
+    }
+
+    function toHex(n) { return n.toString(16).padStart(2, '0').toUpperCase(); }
+    function rgbToHex(r, g, b) { return '#' + toHex(r) + toHex(g) + toHex(b); }
+
+    function renderPalette(colors) {
+      palette.innerHTML = '';
+      colors.forEach(c => {
+        const hex = rgbToHex(c.r, c.g, c.b);
+        const sw = document.createElement('div');
+        sw.className = 'swatch';
+        sw.title = 'Click to copy ' + hex;
+
+        const color = document.createElement('div');
+        color.className = 'swatch-color';
+        color.style.background = hex;
+
+        const meta = document.createElement('div');
+        meta.className = 'swatch-meta';
+        const hexEl = document.createElement('div');
+        hexEl.className = 'swatch-hex';
+        hexEl.textContent = hex;
+        const rgbEl = document.createElement('div');
+        rgbEl.className = 'swatch-rgb';
+        rgbEl.textContent = 'rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')';
+        meta.appendChild(hexEl);
+        meta.appendChild(rgbEl);
+
+        sw.appendChild(color);
+        sw.appendChild(meta);
+        sw.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(hex);
+            showToast(hex + ' copied');
+          } catch (e) { showError('Copy failed.'); }
+        });
+        palette.appendChild(sw);
+      });
+    }
+
+    resetBtn.addEventListener('click', () => {
+      imageObj = null;
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      palette.innerHTML = '';
+      preview.removeAttribute('src');
+      clearError();
+    });
+  </script>
+</body>
+</html>

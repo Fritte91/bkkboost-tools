@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spreadsheet Viewer — BkkBoost Tools</title>
+  <meta name="description" content="Preview .xlsx and .xls files without Excel. Multi-sheet, frozen header, resizable columns. Read-only and 100% client-side.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    .sheet-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .sheet-tab {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text2);
+      padding: 7px 14px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sheet-tab:hover { color: var(--text); border-color: var(--border2); }
+    .sheet-tab.active {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: white;
+    }
+    .stats-row {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 12px;
+    }
+    .stats-row strong { color: var(--text); font-weight: 500; }
+    .table-wrap {
+      overflow: auto;
+      max-height: 640px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+    }
+    table.sv-table {
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+      font-family: 'DM Mono', monospace;
+      table-layout: fixed;
+    }
+    table.sv-table th, table.sv-table td {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    table.sv-table th {
+      background: var(--surface2);
+      font-weight: 500;
+      color: var(--text);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      user-select: none;
+      cursor: default;
+    }
+    table.sv-table th.row-num,
+    table.sv-table td.row-num {
+      background: var(--surface2);
+      color: var(--text3);
+      font-size: 11px;
+      text-align: right;
+      width: 56px;
+      min-width: 56px;
+      max-width: 56px;
+      padding: 8px 10px;
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      border-right: 1px solid var(--border2);
+    }
+    table.sv-table th.row-num { z-index: 3; }
+    table.sv-table tbody tr:nth-child(even) td:not(.row-num) { background: rgba(255,255,255,0.02); }
+    table.sv-table tbody tr:hover td:not(.row-num) { background: rgba(232,83,26,0.04); }
+    .resize-handle {
+      position: absolute;
+      top: 0;
+      right: -3px;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none;
+      z-index: 4;
+    }
+    .resize-handle:hover, .resize-handle.dragging {
+      background: var(--orange);
+      opacity: 0.5;
+    }
+    th { position: sticky; }
+    th .th-content { position: relative; padding-right: 4px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .empty-msg {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text3);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Spreadsheet Viewer</h1>
+      <p class="tool-desc">Preview .xlsx files without Excel. Frozen header, zebra rows, drag column borders to resize.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">📋</div>
+      <div class="dropzone-title">Drop a .xlsx file or click to browse</div>
+      <div class="dropzone-subtitle">Read-only viewer · multi-sheet workbooks supported</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+    <div id="loadingBar" class="info-bar hidden">Reading workbook…</div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Sheets</div>
+        <div class="sheet-tabs" id="sheetTabs"></div>
+        <div class="stats-row">
+          <span><strong id="rowCount">0</strong> rows</span>
+          <span><strong id="colCount">0</strong> columns</span>
+          <span><strong id="cellCount">0</strong> cells</span>
+          <span>File: <strong id="fileName">—</strong></span>
+        </div>
+        <div class="table-wrap" id="tableWrap"></div>
+        <div class="actions">
+          <button class="btn-primary" id="downloadCsvBtn">⬇ Download as CSV</button>
+          <button class="btn-ghost" id="resetBtn">Load different file</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const loadingBar = document.getElementById('loadingBar');
+    const workspace = document.getElementById('workspace');
+    const sheetTabs = document.getElementById('sheetTabs');
+    const tableWrap = document.getElementById('tableWrap');
+    const rowCountEl = document.getElementById('rowCount');
+    const colCountEl = document.getElementById('colCount');
+    const cellCountEl = document.getElementById('cellCount');
+    const fileNameEl = document.getElementById('fileName');
+
+    let workbook = null;
+    let activeSheet = '';
+    let currentFileName = '';
+    const PREVIEW_LIMIT = 500;
+
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError();
+      loadingBar.classList.remove('hidden');
+      currentFileName = file.name;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = new Uint8Array(reader.result);
+          workbook = XLSX.read(data, { type: 'array' });
+          if (!workbook.SheetNames.length) {
+            showError('Workbook has no sheets.');
+            loadingBar.classList.add('hidden');
+            return;
+          }
+          fileNameEl.textContent = currentFileName;
+          activeSheet = workbook.SheetNames[0];
+          renderSheetTabs();
+          renderActiveSheet();
+          workspace.classList.remove('hidden');
+          loadingBar.classList.add('hidden');
+        } catch (e) {
+          loadingBar.classList.add('hidden');
+          showError('Could not read workbook: ' + (e.message || e));
+        }
+      };
+      reader.onerror = () => { loadingBar.classList.add('hidden'); showError('Could not read file.'); };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function renderSheetTabs() {
+      sheetTabs.innerHTML = '';
+      workbook.SheetNames.forEach(name => {
+        const btn = document.createElement('button');
+        btn.className = 'sheet-tab' + (name === activeSheet ? ' active' : '');
+        btn.textContent = name;
+        btn.title = name;
+        btn.addEventListener('click', () => {
+          activeSheet = name;
+          renderSheetTabs();
+          renderActiveSheet();
+        });
+        sheetTabs.appendChild(btn);
+      });
+    }
+
+    function colLabel(n) {
+      let s = '';
+      n = n + 1;
+      while (n > 0) {
+        const r = (n - 1) % 26;
+        s = String.fromCharCode(65 + r) + s;
+        n = Math.floor((n - 1) / 26);
+      }
+      return s;
+    }
+
+    function renderActiveSheet() {
+      const sheet = workbook.Sheets[activeSheet];
+      const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' });
+      const totalRows = grid.length;
+      const totalCols = grid.reduce((m, r) => Math.max(m, r.length), 0);
+      let totalCells = 0;
+      for (const r of grid) for (const c of r) if (c !== '' && c !== null && c !== undefined) totalCells++;
+      rowCountEl.textContent = totalRows;
+      colCountEl.textContent = totalCols;
+      cellCountEl.textContent = totalCells;
+
+      tableWrap.innerHTML = '';
+      if (totalRows === 0 || totalCols === 0) {
+        const msg = document.createElement('div');
+        msg.className = 'empty-msg';
+        msg.textContent = 'This sheet is empty.';
+        tableWrap.appendChild(msg);
+        return;
+      }
+
+      const previewRows = grid.slice(0, PREVIEW_LIMIT);
+
+      const table = document.createElement('table');
+      table.className = 'sv-table';
+
+      const colgroup = document.createElement('colgroup');
+      const corner = document.createElement('col');
+      corner.style.width = '56px';
+      colgroup.appendChild(corner);
+      for (let c = 0; c < totalCols; c++) {
+        const col = document.createElement('col');
+        col.style.width = '160px';
+        colgroup.appendChild(col);
+      }
+      table.appendChild(colgroup);
+
+      const thead = document.createElement('thead');
+      const trH = document.createElement('tr');
+      const cornerTh = document.createElement('th');
+      cornerTh.className = 'row-num';
+      cornerTh.textContent = '#';
+      trH.appendChild(cornerTh);
+      for (let c = 0; c < totalCols; c++) {
+        const th = document.createElement('th');
+        const wrap = document.createElement('div');
+        wrap.className = 'th-content';
+        const label = document.createElement('span');
+        label.textContent = colLabel(c);
+        wrap.appendChild(label);
+        const handle = document.createElement('span');
+        handle.className = 'resize-handle';
+        attachResize(handle, colgroup.children[c + 1]);
+        wrap.appendChild(handle);
+        th.appendChild(wrap);
+        trH.appendChild(th);
+      }
+      thead.appendChild(trH);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      for (let i = 0; i < previewRows.length; i++) {
+        const tr = document.createElement('tr');
+        const num = document.createElement('td');
+        num.className = 'row-num';
+        num.textContent = i + 1;
+        tr.appendChild(num);
+        for (let c = 0; c < totalCols; c++) {
+          const td = document.createElement('td');
+          const v = previewRows[i][c];
+          const text = v == null ? '' : String(v);
+          td.textContent = text;
+          td.title = text;
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      tableWrap.appendChild(table);
+
+      if (totalRows > PREVIEW_LIMIT) {
+        const note = document.createElement('div');
+        note.style.cssText = 'padding: 10px; font-size: 12px; color: var(--text3); text-align: center; border-top: 1px solid var(--border);';
+        note.textContent = 'Showing first ' + PREVIEW_LIMIT + ' rows of ' + totalRows + ' · download CSV for full data';
+        tableWrap.appendChild(note);
+      }
+    }
+
+    function attachResize(handle, colEl) {
+      let startX = 0, startW = 0, dragging = false;
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        dragging = true;
+        handle.classList.add('dragging');
+        startX = e.clientX;
+        startW = colEl.offsetWidth;
+        document.body.style.cursor = 'col-resize';
+        const onMove = ev => {
+          if (!dragging) return;
+          const w = Math.max(40, startW + (ev.clientX - startX));
+          colEl.style.width = w + 'px';
+        };
+        const onUp = () => {
+          dragging = false;
+          handle.classList.remove('dragging');
+          document.body.style.cursor = '';
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+    }
+
+    function safeFileName(name) {
+      return name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || 'sheet';
+    }
+
+    document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+      if (!workbook) return;
+      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[activeSheet]);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const base = currentFileName.replace(/\.[^.]+$/, '');
+      a.download = base + '-' + safeFileName(activeSheet) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      workbook = null;
+      activeSheet = '';
+      currentFileName = '';
+      sheetTabs.innerHTML = '';
+      tableWrap.innerHTML = '';
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      clearError();
+    });
+  </script>
+</body>
+</html>

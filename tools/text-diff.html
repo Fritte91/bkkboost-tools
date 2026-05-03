@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Text Diff Checker — BkkBoost Tools</title>
+  <meta name="description" content="Compare two pieces of text and view the diff side-by-side, inline, or in unified format.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
+  <style>
+    .input-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 720px) { .input-grid { grid-template-columns: 1fr; } }
+    .input-grid textarea {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      min-height: 200px;
+    }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; justify-content: center; }
+
+    .mode-tabs {
+      display: inline-flex;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      padding: 4px;
+      gap: 2px;
+    }
+    .mode-tab {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .mode-tab:hover { color: var(--text); }
+    .mode-tab.active { background: var(--orange); color: white; }
+
+    .diff-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .stats {
+      display: flex;
+      gap: 14px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+    }
+    .stats .add { color: #86EFAC; }
+    .stats .del { color: #FCA5A5; }
+    .stats .eq  { color: var(--text3); }
+
+    .diff-output {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-sm);
+      overflow: auto;
+      max-height: 560px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    /* Side by side */
+    .sbs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-width: 100%;
+    }
+    .sbs-row {
+      display: contents;
+    }
+    .sbs-cell {
+      display: grid;
+      grid-template-columns: 44px 1fr;
+      align-items: stretch;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      white-space: pre;
+    }
+    .sbs-cell.left { border-right: 1px solid var(--border); }
+    .sbs-num {
+      color: var(--text3);
+      text-align: right;
+      padding: 1px 8px;
+      background: rgba(255,255,255,0.02);
+      user-select: none;
+      font-size: 11px;
+    }
+    .sbs-text { padding: 1px 10px; color: var(--text); white-space: pre; overflow-x: auto; }
+    .sbs-cell.del .sbs-text { background: rgba(239,68,68,0.10); color: #FECACA; }
+    .sbs-cell.del .sbs-num  { background: rgba(239,68,68,0.18); color: #FCA5A5; }
+    .sbs-cell.add .sbs-text { background: rgba(34,197,94,0.10); color: #BBF7D0; }
+    .sbs-cell.add .sbs-num  { background: rgba(34,197,94,0.18); color: #86EFAC; }
+    .sbs-cell.pad .sbs-text { background: rgba(255,255,255,0.02); }
+    .sbs-cell.pad .sbs-num  { background: rgba(255,255,255,0.02); }
+
+    /* Inline */
+    .inline-line {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      white-space: pre;
+      padding: 1px 0;
+    }
+    .inline-marker { text-align: center; color: var(--text3); font-weight: 500; }
+    .inline-text { padding-right: 12px; overflow-x: auto; }
+    .inline-line.del { background: rgba(239,68,68,0.10); }
+    .inline-line.del .inline-marker { color: #FCA5A5; }
+    .inline-line.del .inline-text { color: #FECACA; }
+    .inline-line.add { background: rgba(34,197,94,0.10); }
+    .inline-line.add .inline-marker { color: #86EFAC; }
+    .inline-line.add .inline-text { color: #BBF7D0; }
+
+    /* Unified */
+    pre.unified {
+      margin: 0;
+      padding: 14px 16px;
+      color: var(--text);
+      white-space: pre;
+      overflow: auto;
+    }
+    pre.unified .add { color: #86EFAC; }
+    pre.unified .del { color: #FCA5A5; }
+    pre.unified .hunk { color: var(--blue); }
+    pre.unified .meta { color: var(--text3); }
+
+    .empty-diff {
+      padding: 32px;
+      text-align: center;
+      color: var(--text3);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Text Diff Checker</h1>
+      <p class="tool-desc">Compare two pieces of text and view the diff side-by-side, inline, or in unified format.</p>
+    </div>
+
+    <div class="panel">
+      <div class="input-grid">
+        <div>
+          <label for="origIn">Original</label>
+          <textarea id="origIn" spellcheck="false"></textarea>
+        </div>
+        <div>
+          <label for="modIn">Modified</label>
+          <textarea id="modIn" spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="compareBtn">⇔ Compare</button>
+        <button class="btn-secondary" id="swapBtn">↔ Swap</button>
+        <button class="btn-ghost" id="clearBtn">Clear</button>
+      </div>
+    </div>
+
+    <div class="panel" id="resultPanel">
+      <div class="diff-header">
+        <div class="mode-tabs" id="modeTabs">
+          <button class="mode-tab active" data-mode="sbs">Side by Side</button>
+          <button class="mode-tab" data-mode="inline">Inline</button>
+          <button class="mode-tab" data-mode="unified">Unified</button>
+        </div>
+        <div class="stats" id="stats">
+          <span class="add">+0 added</span>
+          <span class="del">−0 removed</span>
+          <span class="eq">=0 unchanged</span>
+        </div>
+      </div>
+      <div class="diff-output" id="diffOut">
+        <div class="empty-diff">Paste text on both sides and press Compare.</div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const origIn = document.getElementById('origIn');
+    const modIn = document.getElementById('modIn');
+    const compareBtn = document.getElementById('compareBtn');
+    const swapBtn = document.getElementById('swapBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const tabs = document.querySelectorAll('.mode-tab');
+    const diffOut = document.getElementById('diffOut');
+    const stats = document.getElementById('stats');
+
+    origIn.value = 'The quick brown fox\njumps over the lazy dog.\nLine three stays the same.\nFinal line.';
+    modIn.value  = 'The quick red fox\nleaps over the lazy dog.\nLine three stays the same.\nA new ending line.';
+
+    let mode = 'sbs';
+    let lastChanges = null;
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
+    }
+    function splitKeepEmpty(s) {
+      // Drop a single trailing newline so we don't add a blank "ghost" row.
+      if (s.endsWith('\n')) s = s.slice(0, -1);
+      return s.split('\n');
+    }
+
+    function compare() {
+      lastChanges = Diff.diffLines(origIn.value, modIn.value);
+      let added = 0, removed = 0, unchanged = 0;
+      for (const c of lastChanges) {
+        const lines = (c.count != null) ? c.count : splitKeepEmpty(c.value).length;
+        if (c.added) added += lines;
+        else if (c.removed) removed += lines;
+        else unchanged += lines;
+      }
+      stats.innerHTML =
+        '<span class="add">+' + added + ' added</span>' +
+        '<span class="del">−' + removed + ' removed</span>' +
+        '<span class="eq">=' + unchanged + ' unchanged</span>';
+      render();
+    }
+
+    function render() {
+      if (!lastChanges) {
+        diffOut.innerHTML = '<div class="empty-diff">Paste text on both sides and press Compare.</div>';
+        return;
+      }
+      if (mode === 'sbs')      diffOut.innerHTML = renderSBS(lastChanges);
+      else if (mode === 'inline') diffOut.innerHTML = renderInline(lastChanges);
+      else                     diffOut.innerHTML = renderUnified(origIn.value, modIn.value);
+    }
+
+    function renderSBS(changes) {
+      let html = '<div class="sbs-grid">';
+      let oNum = 1, mNum = 1;
+      let i = 0;
+      while (i < changes.length) {
+        const ch = changes[i];
+        if (!ch.added && !ch.removed) {
+          for (const line of splitKeepEmpty(ch.value)) {
+            html += sbsRow(oNum++, line, 'eq', mNum++, line, 'eq');
+          }
+          i++;
+        } else if (ch.removed) {
+          const removedLines = splitKeepEmpty(ch.value);
+          const next = changes[i + 1];
+          const addedLines = (next && next.added) ? splitKeepEmpty(next.value) : [];
+          const max = Math.max(removedLines.length, addedLines.length);
+          for (let k = 0; k < max; k++) {
+            const l = removedLines[k];
+            const r = addedLines[k];
+            html += sbsRow(
+              l !== undefined ? oNum++ : '', l !== undefined ? l : '', l !== undefined ? 'del' : 'pad',
+              r !== undefined ? mNum++ : '', r !== undefined ? r : '', r !== undefined ? 'add' : 'pad'
+            );
+          }
+          i += (next && next.added) ? 2 : 1;
+        } else if (ch.added) {
+          for (const line of splitKeepEmpty(ch.value)) {
+            html += sbsRow('', '', 'pad', mNum++, line, 'add');
+          }
+          i++;
+        }
+      }
+      html += '</div>';
+      return html;
+    }
+    function sbsRow(lNum, lText, lCls, rNum, rText, rCls) {
+      return '<div class="sbs-row">' +
+        '<div class="sbs-cell left ' + lCls + '">' +
+          '<div class="sbs-num">' + lNum + '</div>' +
+          '<div class="sbs-text">' + (lText === '' ? '&nbsp;' : escapeHtml(lText)) + '</div>' +
+        '</div>' +
+        '<div class="sbs-cell right ' + rCls + '">' +
+          '<div class="sbs-num">' + rNum + '</div>' +
+          '<div class="sbs-text">' + (rText === '' ? '&nbsp;' : escapeHtml(rText)) + '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function renderInline(changes) {
+      let html = '';
+      for (const ch of changes) {
+        const cls = ch.added ? 'add' : ch.removed ? 'del' : 'eq';
+        const marker = ch.added ? '+' : ch.removed ? '−' : ' ';
+        for (const line of splitKeepEmpty(ch.value)) {
+          html += '<div class="inline-line ' + cls + '">' +
+            '<div class="inline-marker">' + marker + '</div>' +
+            '<div class="inline-text">' + (line === '' ? '&nbsp;' : escapeHtml(line)) + '</div>' +
+          '</div>';
+        }
+      }
+      return html || '<div class="empty-diff">No differences.</div>';
+    }
+
+    function renderUnified(orig, mod) {
+      const patch = Diff.createTwoFilesPatch('Original', 'Modified', orig, mod, '', '', { context: 3 });
+      const lines = patch.split('\n');
+      let html = '<pre class="unified">';
+      for (const line of lines) {
+        if (line.startsWith('@@')) html += '<span class="hunk">' + escapeHtml(line) + '</span>\n';
+        else if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('Index:') || line.startsWith('===')) {
+          html += '<span class="meta">' + escapeHtml(line) + '</span>\n';
+        }
+        else if (line.startsWith('+')) html += '<span class="add">' + escapeHtml(line) + '</span>\n';
+        else if (line.startsWith('-')) html += '<span class="del">' + escapeHtml(line) + '</span>\n';
+        else html += escapeHtml(line) + '\n';
+      }
+      html += '</pre>';
+      return html;
+    }
+
+    compareBtn.addEventListener('click', compare);
+    swapBtn.addEventListener('click', () => {
+      const a = origIn.value; origIn.value = modIn.value; modIn.value = a;
+      compare();
+    });
+    clearBtn.addEventListener('click', () => {
+      origIn.value = ''; modIn.value = '';
+      lastChanges = null;
+      stats.innerHTML = '<span class="add">+0 added</span><span class="del">−0 removed</span><span class="eq">=0 unchanged</span>';
+      render();
+    });
+    tabs.forEach(t => t.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      mode = t.dataset.mode;
+      render();
+    }));
+
+    compare();
+  </script>
+</body>
+</html>

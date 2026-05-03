@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Screen Ruler — BkkBoost Tools</title>
+  <meta name="description" content="A draggable on-screen ruler for measuring pixels — horizontal and vertical, crosshair, and box-measure modes.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .ruler-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .seg {
+      display: inline-flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .seg button {
+      background: transparent;
+      border: none;
+      color: var(--text2);
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .seg button:hover { color: var(--text); background: var(--surface2); }
+    .seg button.active {
+      background: var(--orange);
+      color: white;
+    }
+
+    .stage {
+      position: relative;
+      background:
+        linear-gradient(var(--surface2) 1px, transparent 1px) 0 0 / 20px 20px,
+        linear-gradient(90deg, var(--surface2) 1px, transparent 1px) 0 0 / 20px 20px,
+        var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      height: 520px;
+      overflow: hidden;
+      cursor: crosshair;
+      user-select: none;
+    }
+
+    .ruler {
+      position: absolute;
+      background: rgba(232, 83, 26, 0.92);
+      backdrop-filter: blur(2px);
+      border-radius: 4px;
+      cursor: move;
+      pointer-events: auto;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .ruler-h { height: 40px; }
+    .ruler-v { width: 40px; }
+
+    .ruler-canvas { display: block; width: 100%; height: 100%; }
+
+    .ruler-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: var(--text);
+      border-radius: 50%;
+      cursor: ew-resize;
+      border: 2px solid var(--bg);
+    }
+    .ruler-h .ruler-handle.left { left: -6px; top: 50%; transform: translateY(-50%); }
+    .ruler-h .ruler-handle.right { right: -6px; top: 50%; transform: translateY(-50%); }
+    .ruler-v .ruler-handle { cursor: ns-resize; }
+    .ruler-v .ruler-handle.left { top: -6px; left: 50%; transform: translateX(-50%); }
+    .ruler-v .ruler-handle.right { bottom: -6px; left: 50%; transform: translateX(-50%); }
+
+    .ruler-label {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border2);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .ruler-v .ruler-label {
+      bottom: auto;
+      top: 50%;
+      left: calc(100% + 8px);
+      transform: translateY(-50%);
+    }
+
+    .crosshair-h, .crosshair-v {
+      position: absolute;
+      background: var(--orange);
+      pointer-events: none;
+      opacity: 0.85;
+    }
+    .crosshair-h { left: 0; right: 0; height: 1px; }
+    .crosshair-v { top: 0; bottom: 0; width: 1px; }
+    .crosshair-coord {
+      position: absolute;
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border2);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .measure-box {
+      position: absolute;
+      border: 2px solid var(--orange);
+      background: rgba(232, 83, 26, 0.12);
+      pointer-events: none;
+    }
+    .measure-box-label {
+      position: absolute;
+      top: -28px;
+      left: 0;
+      background: var(--orange);
+      color: white;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .info-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text2);
+    }
+    .info-row strong { color: var(--text); margin-left: 6px; }
+
+    .color-picker-row {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      font-size: 13px; color: var(--text2);
+    }
+    .color-picker-row input[type=color] {
+      width: 28px; height: 28px; padding: 0; border: none; background: transparent; cursor: pointer;
+    }
+
+    .help-text { font-size: 12px; color: var(--text3); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Screen Ruler</h1>
+      <p class="tool-desc">Measure pixel distances inside the workspace below. Drag the ruler, switch orientation, or click-drag to measure a box.</p>
+    </div>
+
+    <div class="panel">
+      <div class="ruler-controls">
+        <div class="seg" id="modeSeg">
+          <button class="active" data-mode="ruler">Ruler</button>
+          <button data-mode="crosshair">Crosshair</button>
+          <button data-mode="box">Measure Box</button>
+        </div>
+        <div class="seg" id="orientSeg">
+          <button class="active" data-orient="h">Horizontal</button>
+          <button data-orient="v">Vertical</button>
+        </div>
+        <div class="color-picker-row">
+          Color <input type="color" id="colorPick" value="#E8531A">
+        </div>
+        <button class="btn-secondary btn-sm" id="resetBtn">↺ Reset</button>
+      </div>
+      <div class="help-text" id="helpText">Drag the ruler to measure. Drag the round handles on each end to resize.</div>
+    </div>
+
+    <div class="panel" style="padding: 12px;">
+      <div class="stage" id="stage">
+        <div class="ruler ruler-h" id="ruler" style="left: 80px; top: 200px; width: 400px;">
+          <canvas class="ruler-canvas" id="rulerCanvas"></canvas>
+          <div class="ruler-handle left" data-handle="left"></div>
+          <div class="ruler-handle right" data-handle="right"></div>
+          <div class="ruler-label" id="rulerLabel">400 px</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="info-row">
+        <div>Position<strong id="posInfo">x: 80, y: 200</strong></div>
+        <div>Length<strong id="lenInfo">400 px</strong></div>
+        <div>Mouse<strong id="mouseInfo">—</strong></div>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Pixel measurements live in your browser</footer>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const ruler = document.getElementById('ruler');
+    const rulerCanvas = document.getElementById('rulerCanvas');
+    const rulerLabel = document.getElementById('rulerLabel');
+    const colorPick = document.getElementById('colorPick');
+    const modeSeg = document.getElementById('modeSeg');
+    const orientSeg = document.getElementById('orientSeg');
+    const posInfo = document.getElementById('posInfo');
+    const lenInfo = document.getElementById('lenInfo');
+    const mouseInfo = document.getElementById('mouseInfo');
+    const resetBtn = document.getElementById('resetBtn');
+    const helpText = document.getElementById('helpText');
+
+    let mode = 'ruler';
+    let orient = 'h';
+    let color = '#E8531A';
+    let rulerState = { x: 80, y: 200, w: 400, h: 40 };
+
+    function applyRulerColor() {
+      ruler.style.background = hexToRGBA(color, 0.92);
+    }
+    function hexToRGBA(hex, a) {
+      const m = hex.replace('#','');
+      const r = parseInt(m.substring(0,2),16);
+      const g = parseInt(m.substring(2,4),16);
+      const b = parseInt(m.substring(4,6),16);
+      return `rgba(${r},${g},${b},${a})`;
+    }
+
+    function setOrientation(o) {
+      orient = o;
+      if (o === 'h') {
+        ruler.classList.remove('ruler-v');
+        ruler.classList.add('ruler-h');
+        rulerState.w = Math.max(rulerState.w || rulerState.h || 400, 80);
+        rulerState.h = 40;
+      } else {
+        ruler.classList.remove('ruler-h');
+        ruler.classList.add('ruler-v');
+        rulerState.h = Math.max(rulerState.h || rulerState.w || 400, 80);
+        rulerState.w = 40;
+      }
+      applyRulerStyle();
+      drawRuler();
+      updateInfo();
+      [...orientSeg.children].forEach(b => b.classList.toggle('active', b.dataset.orient === o));
+    }
+
+    function applyRulerStyle() {
+      ruler.style.left = rulerState.x + 'px';
+      ruler.style.top = rulerState.y + 'px';
+      ruler.style.width = rulerState.w + 'px';
+      ruler.style.height = rulerState.h + 'px';
+    }
+
+    function drawRuler() {
+      const dpr = window.devicePixelRatio || 1;
+      const w = rulerState.w;
+      const h = rulerState.h;
+      rulerCanvas.width = w * dpr;
+      rulerCanvas.height = h * dpr;
+      rulerCanvas.style.width = w + 'px';
+      rulerCanvas.style.height = h + 'px';
+      const ctx = rulerCanvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.font = '10px "DM Mono", monospace';
+      ctx.textBaseline = 'top';
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1;
+
+      const len = orient === 'h' ? w : h;
+      for (let i = 0; i <= len; i += 10) {
+        let tickLen;
+        if (i % 100 === 0) tickLen = 14;
+        else if (i % 50 === 0) tickLen = 10;
+        else tickLen = 6;
+        ctx.beginPath();
+        if (orient === 'h') {
+          ctx.moveTo(i + 0.5, h);
+          ctx.lineTo(i + 0.5, h - tickLen);
+        } else {
+          ctx.moveTo(w, i + 0.5);
+          ctx.lineTo(w - tickLen, i + 0.5);
+        }
+        ctx.stroke();
+        if (i % 50 === 0 && i !== 0 && i !== len) {
+          const label = String(i);
+          if (orient === 'h') {
+            ctx.fillText(label, i + 3, 2);
+          } else {
+            ctx.save();
+            ctx.translate(2, i + 3);
+            ctx.fillText(label, 0, 0);
+            ctx.restore();
+          }
+        }
+      }
+    }
+
+    function updateInfo() {
+      posInfo.innerHTML = `<strong>x: ${Math.round(rulerState.x)}, y: ${Math.round(rulerState.y)}</strong>`;
+      const len = orient === 'h' ? rulerState.w : rulerState.h;
+      lenInfo.innerHTML = `<strong>${Math.round(len)} px</strong>`;
+      rulerLabel.textContent = Math.round(len) + ' px';
+    }
+
+    let drag = null;
+    ruler.addEventListener('mousedown', e => {
+      if (mode !== 'ruler') return;
+      const handle = e.target.closest('.ruler-handle');
+      const stageRect = stage.getBoundingClientRect();
+      if (handle) {
+        drag = {
+          type: 'resize',
+          handle: handle.dataset.handle,
+          startX: e.clientX - stageRect.left,
+          startY: e.clientY - stageRect.top,
+          orig: { ...rulerState }
+        };
+      } else {
+        drag = {
+          type: 'move',
+          offsetX: e.clientX - stageRect.left - rulerState.x,
+          offsetY: e.clientY - stageRect.top - rulerState.y
+        };
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    function onStageMouseMove(e) {
+      const rect = stage.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      if (mx >= 0 && mx <= rect.width && my >= 0 && my <= rect.height) {
+        mouseInfo.innerHTML = `<strong>x: ${Math.round(mx)}, y: ${Math.round(my)}</strong>`;
+      }
+      if (mode === 'crosshair') {
+        updateCrosshair(mx, my);
+      }
+      if (drag) {
+        if (drag.type === 'move') {
+          rulerState.x = Math.max(0, Math.min(rect.width - rulerState.w, mx - drag.offsetX));
+          rulerState.y = Math.max(0, Math.min(rect.height - rulerState.h, my - drag.offsetY));
+        } else if (drag.type === 'resize') {
+          if (orient === 'h') {
+            if (drag.handle === 'right') {
+              rulerState.w = Math.max(40, mx - drag.orig.x);
+            } else {
+              const newX = Math.max(0, Math.min(drag.orig.x + drag.orig.w - 40, mx));
+              rulerState.w = drag.orig.w + (drag.orig.x - newX);
+              rulerState.x = newX;
+            }
+          } else {
+            if (drag.handle === 'right') {
+              rulerState.h = Math.max(40, my - drag.orig.y);
+            } else {
+              const newY = Math.max(0, Math.min(drag.orig.y + drag.orig.h - 40, my));
+              rulerState.h = drag.orig.h + (drag.orig.y - newY);
+              rulerState.y = newY;
+            }
+          }
+        } else if (drag.type === 'box') {
+          drag.curX = Math.max(0, Math.min(rect.width, mx));
+          drag.curY = Math.max(0, Math.min(rect.height, my));
+          updateMeasureBox();
+        }
+        applyRulerStyle();
+        drawRuler();
+        updateInfo();
+      }
+    }
+    document.addEventListener('mousemove', onStageMouseMove);
+    document.addEventListener('mouseup', () => {
+      if (drag && drag.type === 'box') finishMeasureBox();
+      drag = null;
+    });
+
+    let crosshairH, crosshairV, crosshairCoord;
+    function setupCrosshair() {
+      removeCrosshair();
+      crosshairH = document.createElement('div');
+      crosshairH.className = 'crosshair-h';
+      crosshairH.style.background = color;
+      crosshairV = document.createElement('div');
+      crosshairV.className = 'crosshair-v';
+      crosshairV.style.background = color;
+      crosshairCoord = document.createElement('div');
+      crosshairCoord.className = 'crosshair-coord';
+      stage.appendChild(crosshairH);
+      stage.appendChild(crosshairV);
+      stage.appendChild(crosshairCoord);
+    }
+    function removeCrosshair() {
+      [crosshairH, crosshairV, crosshairCoord].forEach(el => el && el.remove());
+      crosshairH = crosshairV = crosshairCoord = null;
+    }
+    function updateCrosshair(mx, my) {
+      if (!crosshairH) return;
+      crosshairH.style.top = my + 'px';
+      crosshairV.style.left = mx + 'px';
+      crosshairCoord.textContent = `${Math.round(mx)}, ${Math.round(my)}`;
+      const rect = stage.getBoundingClientRect();
+      const offsetX = mx + 12;
+      const offsetY = my + 12;
+      const lr = crosshairCoord.getBoundingClientRect();
+      crosshairCoord.style.left = (offsetX + 80 > rect.width ? mx - 80 : offsetX) + 'px';
+      crosshairCoord.style.top = (offsetY + 24 > rect.height ? my - 28 : offsetY) + 'px';
+    }
+
+    let measureBoxEl = null;
+    let measureBoxLabel = null;
+    function startMeasureBox(e) {
+      const rect = stage.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      drag = { type: 'box', startX: mx, startY: my, curX: mx, curY: my };
+      if (measureBoxEl) measureBoxEl.remove();
+      measureBoxEl = document.createElement('div');
+      measureBoxEl.className = 'measure-box';
+      measureBoxEl.style.borderColor = color;
+      measureBoxEl.style.background = hexToRGBA(color, 0.12);
+      measureBoxLabel = document.createElement('div');
+      measureBoxLabel.className = 'measure-box-label';
+      measureBoxLabel.style.background = color;
+      measureBoxEl.appendChild(measureBoxLabel);
+      stage.appendChild(measureBoxEl);
+      updateMeasureBox();
+    }
+    function updateMeasureBox() {
+      if (!measureBoxEl) return;
+      const x1 = Math.min(drag.startX, drag.curX);
+      const y1 = Math.min(drag.startY, drag.curY);
+      const w = Math.abs(drag.curX - drag.startX);
+      const h = Math.abs(drag.curY - drag.startY);
+      measureBoxEl.style.left = x1 + 'px';
+      measureBoxEl.style.top = y1 + 'px';
+      measureBoxEl.style.width = w + 'px';
+      measureBoxEl.style.height = h + 'px';
+      measureBoxLabel.textContent = `${Math.round(w)} × ${Math.round(h)} px`;
+    }
+    function finishMeasureBox() { /* leave on screen */ }
+
+    stage.addEventListener('mousedown', e => {
+      if (mode === 'box' && e.target === stage) {
+        startMeasureBox(e);
+        e.preventDefault();
+      }
+    });
+
+    function setMode(m) {
+      mode = m;
+      [...modeSeg.children].forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+      ruler.style.display = m === 'ruler' ? 'block' : 'none';
+      if (m === 'crosshair') {
+        setupCrosshair();
+        helpText.textContent = 'Move your mouse over the workspace to see live x, y coordinates.';
+      } else {
+        removeCrosshair();
+      }
+      if (m === 'box') {
+        helpText.textContent = 'Click and drag inside the workspace to draw a measure box.';
+      }
+      if (m === 'ruler') {
+        helpText.textContent = 'Drag the ruler to measure. Drag the round handles on each end to resize.';
+        if (measureBoxEl) { measureBoxEl.remove(); measureBoxEl = null; }
+      }
+    }
+
+    modeSeg.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      setMode(b.dataset.mode);
+    });
+    orientSeg.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      setOrientation(b.dataset.orient);
+    });
+
+    colorPick.addEventListener('input', () => {
+      color = colorPick.value;
+      applyRulerColor();
+      if (crosshairH) { crosshairH.style.background = color; crosshairV.style.background = color; }
+      if (measureBoxEl) { measureBoxEl.style.borderColor = color; measureBoxEl.style.background = hexToRGBA(color, 0.12); measureBoxLabel.style.background = color; }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      rulerState = { x: 80, y: 200, w: 400, h: 40 };
+      setOrientation('h');
+      if (measureBoxEl) { measureBoxEl.remove(); measureBoxEl = null; }
+      setMode('ruler');
+    });
+
+    applyRulerColor();
+    setOrientation('h');
+    drawRuler();
+    updateInfo();
+  </script>
+</body>
+</html>

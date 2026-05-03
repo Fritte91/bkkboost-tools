@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hash Generator — BkkBoost Tools</title>
+  <meta name="description" content="Generate MD5, SHA-1, SHA-256, SHA-384, and SHA-512 hashes of text or files locally.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .source-tag {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text3);
+      margin-bottom: 12px;
+    }
+    .source-tag strong { color: var(--text); font-weight: 500; }
+    .hash-row {
+      display: grid;
+      grid-template-columns: 90px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      margin-bottom: 8px;
+    }
+    .hash-name {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--orange);
+      letter-spacing: 0.04em;
+    }
+    .hash-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .copy-mini {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text3);
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .copy-mini:hover { color: var(--text); border-color: var(--text3); }
+    .copy-mini.copied { color: #86EFAC; border-color: rgba(34,197,94,0.4); }
+    @media (max-width: 600px) {
+      .hash-row { grid-template-columns: 1fr auto; }
+      .hash-name { grid-column: 1 / -1; }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Hash Generator</h1>
+      <p class="tool-desc">Generate MD5, SHA-1, SHA-256, SHA-384, and SHA-512 hashes of text or files. Hashes update as you type.</p>
+    </div>
+
+    <div class="panel">
+      <label for="textIn">Text input</label>
+      <textarea id="textIn" placeholder="Type or paste text…" style="min-height: 140px;"></textarea>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Or hash a file</div>
+      <div class="dropzone" id="dz">
+        <div class="dropzone-icon">📎</div>
+        <div class="dropzone-title">Drop a file or click to browse</div>
+        <div class="dropzone-subtitle">Any file — hashed in your browser</div>
+        <input type="file" id="fileInput" hidden>
+      </div>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div class="panel">
+      <div class="panel-title">Hashes</div>
+      <div class="source-tag" id="sourceTag">Source: <strong>(empty)</strong></div>
+      <div id="hashes"></div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    // ─────────────────────────────────────────────────────────────
+    // MD5 (Ron Rivest, RFC 1321) — Web Crypto doesn't ship with it.
+    // Operates on a Uint8Array, returns lowercase hex.
+    // ─────────────────────────────────────────────────────────────
+    function md5(bytes) {
+      const len = bytes.length;
+      const bitsLow = (len * 8) >>> 0;
+      const bitsHigh = Math.floor(len / 0x20000000) >>> 0;
+      const padLen = (((len + 8) >>> 6) + 1) << 6;
+      const msg = new Uint8Array(padLen);
+      msg.set(bytes);
+      msg[len] = 0x80;
+      msg[padLen - 8] = bitsLow & 0xff;
+      msg[padLen - 7] = (bitsLow >>> 8) & 0xff;
+      msg[padLen - 6] = (bitsLow >>> 16) & 0xff;
+      msg[padLen - 5] = (bitsLow >>> 24) & 0xff;
+      msg[padLen - 4] = bitsHigh & 0xff;
+      msg[padLen - 3] = (bitsHigh >>> 8) & 0xff;
+      msg[padLen - 2] = (bitsHigh >>> 16) & 0xff;
+      msg[padLen - 1] = (bitsHigh >>> 24) & 0xff;
+
+      const K = new Int32Array([
+        -680876936,-389564586,606105819,-1044525330,-176418897,1200080426,-1473231341,-45705983,
+        1770035416,-1958414417,-42063,-1990404162,1804603682,-40341101,-1502002290,1236535329,
+        -165796510,-1069501632,643717713,-373897302,-701558691,38016083,-660478335,-405537848,
+        568446438,-1019803690,-187363961,1163531501,-1444681467,-51403784,1735328473,-1926607734,
+        -378558,-2022574463,1839030562,-35309556,-1530992060,1272893353,-155497632,-1094730640,
+        681279174,-358537222,-722521979,76029189,-640364487,-421815835,530742520,-995338651,
+        -198630844,1126891415,-1416354905,-57434055,1700485571,-1894986606,-1051523,-2054922799,
+        1873313359,-30611744,-1560198380,1309151649,-145523070,-1120210379,718787259,-343485551
+      ]);
+      const S = [
+        7,12,17,22, 7,12,17,22, 7,12,17,22, 7,12,17,22,
+        5, 9,14,20, 5, 9,14,20, 5, 9,14,20, 5, 9,14,20,
+        4,11,16,23, 4,11,16,23, 4,11,16,23, 4,11,16,23,
+        6,10,15,21, 6,10,15,21, 6,10,15,21, 6,10,15,21
+      ];
+
+      let a0 = 1732584193, b0 = -271733879, c0 = -1732584194, d0 = 271733878;
+      const M = new Int32Array(16);
+
+      for (let off = 0; off < padLen; off += 64) {
+        for (let j = 0; j < 16; j++) {
+          const i = off + j * 4;
+          M[j] = (msg[i]) | (msg[i+1] << 8) | (msg[i+2] << 16) | (msg[i+3] << 24);
+        }
+        let A = a0, B = b0, C = c0, D = d0;
+        for (let i = 0; i < 64; i++) {
+          let F, g;
+          if (i < 16)      { F = (B & C) | ((~B) & D); g = i; }
+          else if (i < 32) { F = (D & B) | ((~D) & C); g = (5 * i + 1) & 15; }
+          else if (i < 48) { F = B ^ C ^ D;            g = (3 * i + 5) & 15; }
+          else             { F = C ^ (B | (~D));       g = (7 * i)      & 15; }
+          const temp = D;
+          D = C;
+          C = B;
+          const sum = (A + F + K[i] + M[g]) | 0;
+          const r = (sum << S[i]) | (sum >>> (32 - S[i]));
+          B = (B + r) | 0;
+          A = temp;
+        }
+        a0 = (a0 + A) | 0;
+        b0 = (b0 + B) | 0;
+        c0 = (c0 + C) | 0;
+        d0 = (d0 + D) | 0;
+      }
+
+      function toHex(n) {
+        let s = '';
+        for (let i = 0; i < 4; i++) {
+          s += ((n >>> (i * 8)) & 0xff).toString(16).padStart(2, '0');
+        }
+        return s;
+      }
+      return toHex(a0) + toHex(b0) + toHex(c0) + toHex(d0);
+    }
+
+    function bufToHex(buf) {
+      const bytes = new Uint8Array(buf);
+      let s = '';
+      for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
+      return s;
+    }
+
+    const ALGOS = [
+      { name: 'MD5',     fn: bytes => Promise.resolve(md5(bytes)) },
+      { name: 'SHA-1',   fn: bytes => crypto.subtle.digest('SHA-1',   bytes).then(bufToHex) },
+      { name: 'SHA-256', fn: bytes => crypto.subtle.digest('SHA-256', bytes).then(bufToHex) },
+      { name: 'SHA-384', fn: bytes => crypto.subtle.digest('SHA-384', bytes).then(bufToHex) },
+      { name: 'SHA-512', fn: bytes => crypto.subtle.digest('SHA-512', bytes).then(bufToHex) }
+    ];
+
+    const textIn = document.getElementById('textIn');
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const hashes = document.getElementById('hashes');
+    const sourceTag = document.getElementById('sourceTag');
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    function setSourceTag(html) { sourceTag.innerHTML = 'Source: ' + html; }
+
+    function buildRows(values) {
+      hashes.innerHTML = '';
+      ALGOS.forEach((algo, i) => {
+        const row = document.createElement('div');
+        row.className = 'hash-row';
+        const name = document.createElement('div');
+        name.className = 'hash-name';
+        name.textContent = algo.name;
+        const val = document.createElement('div');
+        val.className = 'hash-val';
+        val.textContent = values[i] || '…';
+        const btn = document.createElement('button');
+        btn.className = 'copy-mini';
+        btn.textContent = 'Copy';
+        btn.disabled = !values[i];
+        btn.addEventListener('click', async () => {
+          if (!values[i]) return;
+          try {
+            await navigator.clipboard.writeText(values[i]);
+            btn.textContent = '✓';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1200);
+          } catch { showError('Copy failed.'); }
+        });
+        row.appendChild(name);
+        row.appendChild(val);
+        row.appendChild(btn);
+        hashes.appendChild(row);
+      });
+    }
+
+    let pendingToken = 0;
+    async function hashBytes(bytes, label) {
+      clearError();
+      const token = ++pendingToken;
+      setSourceTag(label);
+      buildRows(ALGOS.map(() => ''));
+      try {
+        const results = await Promise.all(ALGOS.map(a => a.fn(bytes)));
+        if (token !== pendingToken) return;
+        buildRows(results);
+      } catch (e) {
+        if (token !== pendingToken) return;
+        showError('Hashing failed: ' + e.message);
+      }
+    }
+
+    function hashEmpty() {
+      pendingToken++;
+      setSourceTag('<strong>(empty)</strong>');
+      buildRows(ALGOS.map(() => ''));
+    }
+
+    let textTimer;
+    textIn.addEventListener('input', () => {
+      clearTimeout(textTimer);
+      textTimer = setTimeout(() => {
+        const text = textIn.value;
+        if (!text) { hashEmpty(); return; }
+        const bytes = new TextEncoder().encode(text);
+        hashBytes(bytes, '<strong>text</strong> (' + bytes.length + ' bytes)');
+      }, 80);
+    });
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    async function loadFile(file) {
+      try {
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const safe = file.name.replace(/[<>&]/g, '');
+        await hashBytes(bytes, '<strong>file</strong> ' + safe + ' (' + fmtSize(file.size) + ')');
+      } catch (e) {
+        showError('Could not read file: ' + e.message);
+      }
+    }
+
+    hashEmpty();
+  </script>
+</body>
+</html>

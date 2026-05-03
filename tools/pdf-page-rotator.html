@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Page Rotator — BkkBoost Tools</title>
+  <meta name="description" content="Rotate individual pages in a PDF. Click pages, then rotate.">
+  <link rel="stylesheet" href="../shared.css">
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <style>
+    .file-summary { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .file-summary .file-icon { font-size: 22px; }
+    .file-summary-name { flex: 1; min-width: 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-summary-meta { font-family: 'DM Mono', monospace; color: var(--text3); font-size: 12px; white-space: nowrap; }
+
+    .rotate-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .rotate-controls .stat {
+      margin-left: auto;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--text2);
+    }
+
+    .thumbs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .thumb {
+      position: relative;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.15s;
+      aspect-ratio: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .thumb canvas { max-width: 100%; max-height: 100%; display: block; }
+    .thumb:hover { border-color: var(--border2); }
+    .thumb.selected { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+    .thumb-num {
+      position: absolute;
+      bottom: 4px;
+      left: 4px;
+      background: rgba(0,0,0,0.75);
+      color: white;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+    }
+    .thumb-rot {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: var(--orange);
+      color: white;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .thumb-rot.hidden { display: none; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; justify-content: center; }
+    .render-progress { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text3); margin-top: 8px; text-align: center; }
+    .help-row { font-size: 12px; color: var(--text3); margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>PDF Page Rotator</h1>
+      <p class="tool-desc">Rotate individual pages in a PDF. Click pages to select, then choose a rotation.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">🔃</div>
+      <div class="dropzone-title">Drop a PDF or click to browse</div>
+      <div class="dropzone-subtitle">Single PDF file</div>
+      <input type="file" id="fileInput" accept="application/pdf" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="file-summary">
+          <span class="file-icon">📄</span>
+          <span class="file-summary-name" id="fileName"></span>
+          <span class="file-summary-meta" id="fileMeta"></span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Rotation</div>
+        <div class="rotate-controls">
+          <button class="btn-secondary btn-sm" id="rotCCW">↺ 90° CCW</button>
+          <button class="btn-secondary btn-sm" id="rot180">↻ 180°</button>
+          <button class="btn-secondary btn-sm" id="rotCW">↻ 90° CW</button>
+          <button class="btn-secondary btn-sm" id="rotReset">⟲ Reset</button>
+          <button class="btn-secondary btn-sm" id="selectAll">Select all</button>
+          <button class="btn-secondary btn-sm" id="selectNone">Clear</button>
+          <span class="stat" id="selCount">0 selected</span>
+        </div>
+        <div class="help-row">Click thumbnails to select multiple pages. Rotation buttons apply to current selection.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Pages</div>
+        <div class="thumbs" id="thumbs"></div>
+        <div class="render-progress hidden" id="renderProgress"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="applyBtn">⬇ Apply & Download</button>
+        <button class="btn-secondary" id="resetBtn">🔄 New PDF</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const { PDFDocument, degrees } = PDFLib;
+
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const fileNameEl = document.getElementById('fileName');
+    const fileMetaEl = document.getElementById('fileMeta');
+    const thumbsEl = document.getElementById('thumbs');
+    const selCountEl = document.getElementById('selCount');
+    const applyBtn = document.getElementById('applyBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const renderProgress = document.getElementById('renderProgress');
+
+    let originalFile = null;
+    let originalBytes = null;
+    let pdfDoc = null;
+    let pageCount = 0;
+    let selected = new Set();
+    let rotations = new Map(); // pageNum -> delta (0/90/180/270)
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+      return (b/1024/1024).toFixed(2) + ' MB';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    async function loadFile(file) {
+      clearError();
+      if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+        showError('Please choose a PDF file.');
+        return;
+      }
+      try {
+        originalFile = file;
+        originalBytes = new Uint8Array(await file.arrayBuffer());
+        pdfDoc = await pdfjsLib.getDocument({ data: originalBytes.slice() }).promise;
+        pageCount = pdfDoc.numPages;
+        fileNameEl.textContent = file.name;
+        fileMetaEl.textContent = `${pageCount} pages · ${fmtSize(file.size)}`;
+        selected = new Set();
+        rotations = new Map();
+        for (let i = 1; i <= pageCount; i++) rotations.set(i, 0);
+        workspace.classList.remove('hidden');
+        thumbsEl.innerHTML = '';
+        renderProgress.classList.remove('hidden');
+        for (let i = 1; i <= pageCount; i++) {
+          renderProgress.textContent = `Rendering thumbnail ${i} / ${pageCount}…`;
+          await createThumbContainer(i);
+          await renderThumbCanvas(i);
+        }
+        renderProgress.classList.add('hidden');
+        updateSelectionUI();
+      } catch (err) {
+        showError('Could not read this PDF. ' + (err.message || ''));
+      }
+    }
+
+    async function createThumbContainer(pageNum) {
+      const wrap = document.createElement('div');
+      wrap.className = 'thumb';
+      wrap.dataset.page = pageNum;
+      wrap.innerHTML = `
+        <div class="thumb-canvas-slot"></div>
+        <div class="thumb-num"></div>
+        <div class="thumb-rot hidden"></div>
+      `;
+      wrap.querySelector('.thumb-num').textContent = pageNum;
+      wrap.addEventListener('click', () => {
+        if (selected.has(pageNum)) selected.delete(pageNum);
+        else selected.add(pageNum);
+        updateSelectionUI();
+      });
+      thumbsEl.appendChild(wrap);
+    }
+
+    async function renderThumbCanvas(pageNum) {
+      const wrap = thumbsEl.querySelector(`.thumb[data-page="${pageNum}"]`);
+      if (!wrap) return;
+      const slot = wrap.querySelector('.thumb-canvas-slot');
+      slot.innerHTML = '';
+      const page = await pdfDoc.getPage(pageNum);
+      const rotation = rotations.get(pageNum) || 0;
+      const viewport = page.getViewport({ scale: 0.4, rotation });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      slot.appendChild(canvas);
+      const rotEl = wrap.querySelector('.thumb-rot');
+      if (rotation) {
+        rotEl.textContent = `${rotation > 180 ? rotation - 360 : rotation > 0 ? '+' + rotation : rotation}°`;
+        rotEl.classList.remove('hidden');
+      } else {
+        rotEl.classList.add('hidden');
+      }
+    }
+
+    function updateSelectionUI() {
+      thumbsEl.querySelectorAll('.thumb').forEach(t => {
+        const n = +t.dataset.page;
+        t.classList.toggle('selected', selected.has(n));
+      });
+      selCountEl.textContent = `${selected.size} of ${pageCount} selected`;
+    }
+
+    async function applyRotation(delta) {
+      if (!selected.size) {
+        showError('Select at least one page first.');
+        return;
+      }
+      clearError();
+      for (const pageNum of selected) {
+        const cur = rotations.get(pageNum) || 0;
+        rotations.set(pageNum, ((cur + delta) % 360 + 360) % 360);
+        await renderThumbCanvas(pageNum);
+      }
+    }
+
+    document.getElementById('rotCW').addEventListener('click', () => applyRotation(90));
+    document.getElementById('rotCCW').addEventListener('click', () => applyRotation(-90));
+    document.getElementById('rot180').addEventListener('click', () => applyRotation(180));
+    document.getElementById('rotReset').addEventListener('click', async () => {
+      if (!selected.size) { showError('Select at least one page first.'); return; }
+      clearError();
+      for (const pageNum of selected) {
+        rotations.set(pageNum, 0);
+        await renderThumbCanvas(pageNum);
+      }
+    });
+
+    document.getElementById('selectAll').addEventListener('click', () => {
+      selected = new Set();
+      for (let i = 1; i <= pageCount; i++) selected.add(i);
+      updateSelectionUI();
+    });
+    document.getElementById('selectNone').addEventListener('click', () => {
+      selected = new Set();
+      updateSelectionUI();
+    });
+
+    applyBtn.addEventListener('click', async () => {
+      if (!originalBytes) return;
+      const hasChanges = [...rotations.values()].some(v => v !== 0);
+      if (!hasChanges) {
+        showError('No rotations applied. Select pages and rotate first.');
+        return;
+      }
+      applyBtn.disabled = true;
+      const orig = applyBtn.innerHTML;
+      applyBtn.innerHTML = '<span class="spinner"></span> Building PDF...';
+      clearError();
+      try {
+        const doc = await PDFDocument.load(originalBytes.slice(), { ignoreEncryption: true });
+        const pages = doc.getPages();
+        for (let i = 0; i < pages.length; i++) {
+          const delta = rotations.get(i + 1) || 0;
+          if (delta) {
+            const cur = pages[i].getRotation().angle;
+            pages[i].setRotation(degrees(((cur + delta) % 360 + 360) % 360));
+          }
+        }
+        const bytes = await doc.save();
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const baseName = originalFile.name.replace(/\.[^.]+$/, '');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = baseName + '-rotated.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 0);
+      } catch (err) {
+        showError('Failed to build PDF. ' + (err.message || ''));
+      } finally {
+        applyBtn.innerHTML = orig;
+        applyBtn.disabled = false;
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      originalFile = null;
+      originalBytes = null;
+      pdfDoc = null;
+      pageCount = 0;
+      selected = new Set();
+      rotations = new Map();
+      workspace.classList.add('hidden');
+      thumbsEl.innerHTML = '';
+      fileInput.value = '';
+      clearError();
+    });
+  </script>
+</body>
+</html>

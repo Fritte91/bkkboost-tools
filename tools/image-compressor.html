@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Compressor — BkkBoost Tools</title>
+  <meta name="description" content="Reduce JPEG, WebP, and PNG file sizes with quality control. Runs entirely in your browser.">
+  <link rel="stylesheet" href="../shared.css">
+  <style>
+    .quality-row { display: flex; align-items: center; gap: 14px; }
+    .quality-row input[type="range"] { flex: 1; }
+    .quality-val {
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      color: var(--text);
+      min-width: 44px;
+      text-align: right;
+    }
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 100px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      background: var(--surface2);
+      color: var(--text2);
+    }
+    .stat-pill.good { background: rgba(34,197,94,0.12); color: #86EFAC; }
+    .stat-pill.bad  { background: rgba(239,68,68,0.12); color: #FCA5A5; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: center; align-items: center; }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <a href="../index.html" class="back-link">← All Tools</a>
+    <div class="toolbar-brand"><div class="logo">Bkk<span>Boost</span></div><div class="logo-tag">TOOLS</div></div>
+  </header>
+  <main class="tool-container">
+    <div class="tool-header">
+      <h1>Image Compressor</h1>
+      <p class="tool-desc">Shrink JPEG, WebP, or PNG file sizes with quality control. Runs entirely in your browser.</p>
+    </div>
+
+    <div class="dropzone" id="dz">
+      <div class="dropzone-icon">📦</div>
+      <div class="dropzone-title">Drop an image or click to browse</div>
+      <div class="dropzone-subtitle">PNG, JPEG, WebP — up to ~20 MB</div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+
+    <div id="errorBar" class="error-bar hidden"></div>
+
+    <div id="workspace" class="hidden">
+      <div class="panel">
+        <div class="panel-title">Settings</div>
+        <div class="stack">
+          <div>
+            <label for="quality">Quality</label>
+            <div class="quality-row">
+              <input type="range" id="quality" min="1" max="100" value="75">
+              <div class="quality-val" id="qualityVal">75%</div>
+            </div>
+          </div>
+          <div>
+            <label for="format">Output format</label>
+            <select id="format">
+              <option value="image/jpeg">JPEG</option>
+              <option value="image/webp">WebP</option>
+              <option value="image/png">PNG (lossless — quality is ignored)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-grid">
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Original</span>
+            <span class="preview-size" id="origSize">—</span>
+          </div>
+          <img id="origImg" alt="Original">
+        </div>
+        <div class="preview-card">
+          <div class="preview-label">
+            <span>Compressed</span>
+            <span class="preview-size" id="newSize">—</span>
+          </div>
+          <img id="newImg" alt="Compressed">
+        </div>
+      </div>
+
+      <div class="actions">
+        <span class="stat-pill" id="reduction">—</span>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="downloadBtn">⬇ Download</button>
+        <button class="btn-secondary" id="resetBtn">🔄 New image</button>
+      </div>
+    </div>
+  </main>
+  <footer class="footer">BkkBoost Tools · 100% client-side · Your files never leave your device</footer>
+
+  <script>
+    const dz = document.getElementById('dz');
+    const fileInput = document.getElementById('fileInput');
+    const errorBar = document.getElementById('errorBar');
+    const workspace = document.getElementById('workspace');
+    const origImg = document.getElementById('origImg');
+    const newImg = document.getElementById('newImg');
+    const origSize = document.getElementById('origSize');
+    const newSize = document.getElementById('newSize');
+    const qualityRange = document.getElementById('quality');
+    const qualityVal = document.getElementById('qualityVal');
+    const formatSel = document.getElementById('format');
+    const reduction = document.getElementById('reduction');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    let originalFile = null;
+    let originalImage = null;
+    let compressedBlob = null;
+
+    function fmtSize(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1024 / 1024).toFixed(2) + ' MB';
+    }
+    function showError(msg) { errorBar.textContent = msg; errorBar.classList.remove('hidden'); }
+    function clearError() { errorBar.classList.add('hidden'); }
+
+    dz.addEventListener('click', () => fileInput.click());
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+      clearError();
+      if (!file.type.startsWith('image/')) {
+        showError('Please choose an image file.');
+        return;
+      }
+      originalFile = file;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        originalImage = img;
+        if (origImg.src) URL.revokeObjectURL(origImg.src);
+        origImg.src = url;
+        origSize.textContent = fmtSize(file.size);
+        workspace.classList.remove('hidden');
+        compress();
+      };
+      img.onerror = () => showError('Could not decode this image.');
+      img.src = url;
+    }
+
+    let compressTimer;
+    function scheduleCompress() {
+      clearTimeout(compressTimer);
+      compressTimer = setTimeout(compress, 120);
+    }
+
+    qualityRange.addEventListener('input', () => {
+      qualityVal.textContent = qualityRange.value + '%';
+      scheduleCompress();
+    });
+    formatSel.addEventListener('change', compress);
+
+    function compress() {
+      if (!originalImage) return;
+      const canvas = document.createElement('canvas');
+      canvas.width = originalImage.naturalWidth;
+      canvas.height = originalImage.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (formatSel.value === 'image/jpeg') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.drawImage(originalImage, 0, 0);
+      const type = formatSel.value;
+      const q = qualityRange.value / 100;
+      canvas.toBlob(blob => {
+        if (!blob) { showError('Could not encode in selected format.'); return; }
+        compressedBlob = blob;
+        if (newImg.src) URL.revokeObjectURL(newImg.src);
+        newImg.src = URL.createObjectURL(blob);
+        newSize.textContent = fmtSize(blob.size);
+        const pct = (1 - blob.size / originalFile.size) * 100;
+        if (pct >= 0) {
+          reduction.textContent = '↓ ' + pct.toFixed(1) + '% smaller';
+          reduction.className = 'stat-pill good';
+        } else {
+          reduction.textContent = '↑ ' + Math.abs(pct).toFixed(1) + '% larger';
+          reduction.className = 'stat-pill bad';
+        }
+      }, type, q);
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      if (!compressedBlob) return;
+      const ext = formatSel.value === 'image/jpeg' ? 'jpg' :
+                  formatSel.value === 'image/webp' ? 'webp' : 'png';
+      const baseName = originalFile.name.replace(/\.[^.]+$/, '');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(compressedBlob);
+      a.download = baseName + '-compressed.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 0);
+    });
+
+    resetBtn.addEventListener('click', () => {
+      originalFile = null;
+      originalImage = null;
+      compressedBlob = null;
+      workspace.classList.add('hidden');
+      fileInput.value = '';
+      if (origImg.src) URL.revokeObjectURL(origImg.src);
+      if (newImg.src) URL.revokeObjectURL(newImg.src);
+      origImg.removeAttribute('src');
+      newImg.removeAttribute('src');
+      clearError();
+    });
+  </script>
+</body>
+</html>
